@@ -280,6 +280,40 @@ func (c *Client) ScanVuln(ctx context.Context) (*VulnResponse, error) {
 	return &out, nil
 }
 
+// --- Page Builder ----------------------------------------------------------
+
+// PageCreateRequest is the body of POST /page.
+type PageCreateRequest struct {
+	Title   string `json:"title"`
+	Builder string `json:"builder"`
+	Payload string `json:"payload"`
+}
+
+// PageCreateResponse mirrors POST /page success.
+type PageCreateResponse struct {
+	PostID int    `json:"post_id"`
+	URL    string `json:"url"`
+}
+
+// CreatePage pushes a page payload remotely to the active builder.
+func (c *Client) CreatePage(ctx context.Context, req PageCreateRequest) (*PageCreateResponse, error) {
+	var out PageCreateResponse
+	if err := c.Do(ctx, "POST", "/page", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// UpdatePage updates an existing page via POST /page/{id}.
+func (c *Client) UpdatePage(ctx context.Context, id int, req PageCreateRequest) (*PageCreateResponse, error) {
+	var out PageCreateResponse
+	path := fmt.Sprintf("/page/%d", id)
+	if err := c.Do(ctx, "POST", path, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 
 // RollbackRequest is the body of POST /rollback.
 type RollbackRequest struct {

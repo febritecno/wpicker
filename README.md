@@ -79,10 +79,6 @@ wpicker rollback <manifest-id>
 ```
 
 ## 📖 Documentation
-
-- **Production Deployment:** See [`DEPLOYMENT.md`](DEPLOYMENT.md) for full instructions on installing the plugin on live servers.
-- **AI Agent Integration:** This repo includes a `.cursorrules` file that auto-configures Cursor/Claude to use WPicker properly.
-- **PRD:** See [`PRD.md`](PRD.md) for the full product requirements.
 - **REST Contract:** [`plugin/includes/REST/`](plugin/includes/REST/).
 - **CLI Commands:** [`cli/cmd/`](cli/cmd/).
 
