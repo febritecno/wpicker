@@ -1,0 +1,2 @@
+# Drop-in must-use plugins for the wp-env dev environment go here.
+# This directory is mapped to wp-content/mu-plugins by .wp-env.json.

@@ -1,0 +1,19 @@
+{
+  "name": "wpicker",
+  "version": "1.1.0",
+  "private": true,
+  "description": "WPicker — a bridge (Go CLI + WordPress plugin) to make WordPress AI-native. The Eyes (plugin) + The Hands (CLI).",
+  "scripts": {
+    "dev": "wp-env start",
+    "stop": "wp-env stop",
+    "clean": "wp-env destroy",
+    "cli": "wp-env run cli",
+    "env": "wp-env"
+  },
+  "devDependencies": {
+    "@wordpress/env": "^10.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

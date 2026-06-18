@@ -1,0 +1,35 @@
+# --- Node / npm ---
+node_modules/
+npm-debug.log*
+.npm/
+
+# --- @wordpress/env ---
+.wp-env/
+.wp-env.json.override
+wp-content/
+.wp-env.override.json
+
+# --- Go ---
+cli/bin/
+cli/dist/
+bin/
+*.exe
+*.test
+*.out
+vendor/
+
+# --- PHP / Composer ---
+plugin/vendor/
+plugin/composer.lock
+*.log
+
+# --- Editor / OS ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- Local runtime artifacts (CLI working dir) ---
+.wpicker/
+.cursorrules
