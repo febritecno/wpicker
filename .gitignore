@@ -33,3 +33,10 @@ plugin/composer.lock
 # --- Local runtime artifacts (CLI working dir) ---
 .wpicker/
 .cursorrules
+
+# --- Project docs (local only) ---
+DEPLOYMENT.md
+PRD.md
+
+# --- Test / tool caches ---
+.phpunit.result.cache
