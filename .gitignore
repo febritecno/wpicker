@@ -19,9 +19,10 @@ bin/
 vendor/
 
 # --- PHP / Composer ---
-plugin/vendor/
-plugin/composer.lock
 *.log
+
+# --- WordPress plugin (not versioned; packaged separately) ---
+plugin/
 
 # --- Editor / OS ---
 .DS_Store
