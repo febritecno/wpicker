@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<phpunit
+	bootstrap="tests/php/bootstrap.php"
+	colors="true"
+	beStrictAboutTestsThatDoNotTestAnything="true"
+	beStrictAboutOutputDuringTests="true"
+>
+	<testsuites>
+		<testsuite name="WPicker Unit">
+			<directory prefix="Test" suffix=".php">tests/php/</directory>
+		</testsuite>
+	</testsuites>
+	<php>
+		<const name="WPICKER_VERSION" value="1.1.0"/>
+		<const name="WPICKER_DIR" value="./"/>
+	</php>
+</phpunit>

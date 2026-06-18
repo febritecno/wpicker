@@ -19,10 +19,9 @@ bin/
 vendor/
 
 # --- PHP / Composer ---
+plugin/vendor/
+plugin/composer.lock
 *.log
-
-# --- WordPress plugin (not versioned; packaged separately) ---
-plugin/
 
 # --- Editor / OS ---
 .DS_Store
@@ -34,10 +33,6 @@ plugin/
 # --- Local runtime artifacts (CLI working dir) ---
 .wpicker/
 .cursorrules
-
-# --- Project docs (local only) ---
-DEPLOYMENT.md
-PRD.md
 
 # --- Test / tool caches ---
 .phpunit.result.cache

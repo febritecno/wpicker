@@ -1,0 +1,42 @@
+{
+  "name": "wpicker/plugin",
+  "description": "WPicker — The Eyes: WordPress plugin exposing AI-friendly context, theme sync, and the Deployment Vault (snapshot/rollback).",
+  "type": "wordpress-plugin",
+  "license": "GPL-2.0-or-later",
+  "version": "1.1.0",
+  "require": {
+    "php": ">=7.4"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^9.6",
+    "yoast/phpunit-polyfills": "^2.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "WPicker\\": "includes/"
+    },
+    "classmap": [
+      "includes/"
+    ]
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "WPicker\\Tests\\": "tests/php/"
+    }
+  },
+  "scripts": {
+    "test": [
+      "@putenv WP_TESTS_PHPUNIT_POLYFILLS_PATH=vendor/yoast/phpunit-polyfills",
+      "phpunit"
+    ],
+    "lint": "find includes -name '*.php' -exec php -l {} \\;"
+  },
+  "config": {
+    "platform": {
+      "php": "7.4"
+    },
+    "allow-plugins": {
+      "dealerdirect/phpcodesniffer-composer-installer": true
+    }
+  }
+}

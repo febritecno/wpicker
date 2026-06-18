@@ -1,0 +1,54 @@
+/* WPicker admin styles */
+.wpicker-admin .wpicker-pin-card {
+	max-width: 520px;
+	padding: 14px 20px;
+	margin: 16px 0;
+}
+
+.wpicker-admin .wpicker-pin-display {
+	margin-top: 12px;
+	padding: 16px;
+	background: #f6f7f7;
+	border: 1px dashed #c3c4c7;
+	border-radius: 4px;
+	text-align: center;
+}
+
+.wpicker-admin .wpicker-pin-code {
+	font-family: Menlo, Consolas, monospace;
+	font-size: 2.4em;
+	font-weight: 700;
+	letter-spacing: 0.35em;
+	color: #1d2327;
+	padding-left: 0.35em; /* compensate letter-spacing on last char */
+}
+
+.wpicker-admin .wpicker-pin-expires {
+	margin-top: 6px;
+	font-size: 0.85em;
+	color: #646970;
+}
+
+.wpicker-admin .wpicker-status {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 10px;
+	font-size: 0.8em;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.wpicker-admin .wpicker-status-applied  { background: #e6f4ea; color: #1a7d37; }
+.wpicker-admin .wpicker-status-aborted  { background: #fbeaea; color: #b32d2e; }
+.wpicker-admin .wpicker-status-restored { background: #e9effb; color: #1d4fc4; }
+.wpicker-admin .wpicker-status-pending  { background: #f0f0f1; color: #50575e; }
+
+.wpicker-admin .wpicker-error-pre {
+	background: #1d2327;
+	color: #ffbcbc;
+	padding: 12px;
+	overflow: auto;
+	font-size: 0.82em;
+	border-radius: 3px;
+}
