@@ -9,9 +9,10 @@ npm-debug.log*
 wp-content/
 .wp-env.override.json
 
-# --- Go ---
+# --- Go / Build ---
 cli/bin/
 cli/dist/
+dist/
 bin/
 *.exe
 *.test

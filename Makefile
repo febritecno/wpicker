@@ -76,11 +76,11 @@ lint: vet-go lint-php ## Run all linters
 # ------------------------------------------------------------------
 .PHONY: package-plugin
 package-plugin: ## Zip the plugin for distribution -> dist/wpicker.zip
-	@rm -rf dist && mkdir -p dist/staging/wpicker
+	@mkdir -p dist/staging/wpicker
 	@rsync -a --exclude='vendor/' --exclude='tests/' --exclude='.git/' --exclude='node_modules/' $(PLUGIN_DIR)/ dist/staging/wpicker/
-	@cd dist/staging && zip -r ../wpicker-1.1.0.zip wpicker >/dev/null
+	@cd dist/staging && zip -r ../wpicker.zip wpicker >/dev/null
 	@rm -rf dist/staging
-	@echo "Built: dist/wpicker-1.1.0.zip"
+	@echo "Built: dist/wpicker.zip"
 
 .PHONY: package-cli
 package-cli: ## Cross-compile the CLI for darwin/linux -> dist/
