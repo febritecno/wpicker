@@ -34,5 +34,9 @@ plugin/composer.lock
 .wpicker/
 .cursorrules
 
+# --- Project docs (local only) ---
+DEPLOYMENT.md
+PRD.md
+
 # --- Test / tool caches ---
 .phpunit.result.cache
