@@ -3,7 +3,7 @@
  * Plugin Name:       WPicker
  * Plugin URI:        https://example.com/wpicker
  * Description:       The Eyes — exposes AI-friendly site context, child-theme sync, and a Deployment Vault (snapshot/rollback) for the WPicker CLI.
- * Version:           1.1.0
+ * Version:           1.0.0
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Author:            WPicker
@@ -28,7 +28,7 @@ function _wpicker_define( string $key, $value ): void {
 	}
 }
 
-_wpicker_define( 'WPICKER_VERSION', '1.1.0' );
+_wpicker_define( 'WPICKER_VERSION', '1.0.0' );
 _wpicker_define( 'WPICKER_FILE', __FILE__ );
 _wpicker_define( 'WPICKER_DIR', plugin_dir_path( __FILE__ ) );
 _wpicker_define( 'WPICKER_URL', plugin_dir_url( __FILE__ ) );
