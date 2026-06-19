@@ -134,6 +134,10 @@ final class Core {
 				$controller->register( self::REST_NAMESPACE );
 			}
 		}
+
+		// Register System auto-updater
+		$updater = new System\Updater();
+		$updater->register();
 	}
 
 	/**

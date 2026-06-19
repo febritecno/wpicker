@@ -26,7 +26,7 @@ On success, a WordPress Application Password is stored in ~/` + config.DirName +
 		if err != nil {
 			return err
 		}
-		if err := auth.Login(cmd.Context(), cfg, os.Stdin, os.Stdout); err != nil {
+		if err := auth.Login(cmd.Context(), cfg, Version, os.Stdin, os.Stdout); err != nil {
 			return err
 		}
 		return nil

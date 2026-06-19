@@ -55,11 +55,12 @@ func (c *Client) GetContext(ctx context.Context) (*ContextResponse, error) {
 
 // ChallengeResponse mirrors GET /device/challenge.
 type ChallengeResponse struct {
-	UserID      int    `json:"user_id"`
-	PIN         string `json:"pin"`
-	ExpiresAt   string `json:"expires_at_gmt"`
-	TTL         int    `json:"ttl"`
-	Hint        string `json:"hint"`
+	UserID        int    `json:"user_id"`
+	PIN           string `json:"pin"`
+	ExpiresAt     string `json:"expires_at_gmt"`
+	PluginVersion string `json:"plugin_version"`
+	TTL           int    `json:"ttl"`
+	Hint          string `json:"hint"`
 }
 
 // Challenge requests a new pairing PIN.

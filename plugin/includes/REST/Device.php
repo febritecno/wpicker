@@ -152,6 +152,7 @@ final class Device extends Base {
 				'pin'            => $issued['pin'],
 				'expires_at_gmt' => $issued['expires_at_gmt'],
 				'ttl'            => $issued['ttl'],
+				'plugin_version' => WPICKER_VERSION,
 				'hint'           => 'Enter this PIN into the CLI prompt, or read it in WP-Admin → WPicker → Devices.',
 			)
 		);

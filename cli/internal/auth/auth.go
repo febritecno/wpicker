@@ -28,7 +28,7 @@ import (
 // The reader/writer are injected so the flow can be tested without a TTY.
 // tempBasic is the user's main credentials (username/password) used ONLY for
 // the challenge + register calls; it is never persisted.
-func Login(ctx context.Context, cfg *config.Config, in io.Reader, out io.Writer) error {
+func Login(ctx context.Context, cfg *config.Config, cliVersion string, in io.Reader, out io.Writer) error {
 	r := bufio.NewReader(in)
 
 	// 1. Site URL.
@@ -65,6 +65,15 @@ func Login(ctx context.Context, cfg *config.Config, in io.Reader, out io.Writer)
 	if err != nil {
 		return fmt.Errorf("challenge failed (HTTP %d): %w", status, err)
 	}
+
+	if challenge.PluginVersion != "" && challenge.PluginVersion != cliVersion {
+		fmt.Fprintf(out, "\n⚠️  VERSION MISMATCH: CLI is v%s, but Plugin is v%s.\n", cliVersion, challenge.PluginVersion)
+		fmt.Fprintln(out, "   We strongly recommend updating so both are the same version.")
+		fmt.Fprintln(out, "   - To update CLI: run `wpicker update`")
+		fmt.Fprintln(out, "   - To update Plugin: go to WP Admin -> Plugins -> Update WPicker")
+		fmt.Fprintln(out)
+	}
+
 	fmt.Fprintf(out, "✓ PIN issued. Expires %s.\n", challenge.ExpiresAt)
 
 	// 5. Read the PIN from the user (confirms human-in-the-loop).
