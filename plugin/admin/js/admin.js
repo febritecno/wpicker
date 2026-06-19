@@ -36,23 +36,48 @@
 		return { status: res.status, body: json };
 	}
 
-	// --- PIN generation ---
+	// --- PIN generation and auto-refresh ---
 	var genBtn = document.getElementById( 'wpicker-generate-pin' );
+	var countdownTimer = null;
+	var refreshTimer = null;
+	var secondsLeft = 10;
+
+	async function fetchPin() {
+		var r = await api( 'GET', '/device/challenge' );
+		if ( r.body && r.body.ok && r.body.data && r.body.data.pin ) {
+			document.getElementById( 'wpicker-pin-code' ).textContent = r.body.data.pin;
+			document.getElementById( 'wpicker-pin-display' ).style.display = 'block';
+			
+			// Reset countdown
+			secondsLeft = 10;
+			document.getElementById( 'wpicker-pin-countdown' ).textContent = secondsLeft;
+		} else {
+			console.error( 'Failed to generate PIN.' );
+		}
+	}
+
+	function startPinLoop() {
+		if ( countdownTimer ) clearInterval( countdownTimer );
+		if ( refreshTimer ) clearInterval( refreshTimer );
+
+		countdownTimer = setInterval( function() {
+			secondsLeft--;
+			if ( secondsLeft < 0 ) secondsLeft = 0;
+			document.getElementById( 'wpicker-pin-countdown' ).textContent = secondsLeft;
+		}, 1000 );
+
+		refreshTimer = setInterval( function() {
+			fetchPin();
+		}, 10000 );
+	}
+
 	if ( genBtn ) {
 		genBtn.addEventListener( 'click', async function () {
 			genBtn.disabled = true;
 			genBtn.textContent = '…';
-			var r = await api( 'GET', '/device/challenge' );
-			genBtn.disabled = false;
-			genBtn.textContent = 'Generate PIN';
-			if ( r.body && r.body.ok && r.body.data && r.body.data.pin ) {
-				document.getElementById( 'wpicker-pin-code' ).textContent = r.body.data.pin;
-				document.querySelector( '.wpicker-pin-expires' ).textContent =
-					'Expires ' + r.body.data.expires_at_gmt;
-				document.getElementById( 'wpicker-pin-display' ).style.display = 'block';
-			} else {
-				alert( ( r.body && r.body.error && r.body.error.message ) || 'Failed to generate PIN.' );
-			}
+			await fetchPin();
+			startPinLoop();
+			genBtn.style.display = 'none'; // Hide button after initial click
 		} );
 	}
 

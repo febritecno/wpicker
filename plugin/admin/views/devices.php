@@ -40,17 +40,8 @@ $devices = is_array( $devices ) ? $devices : array();
 		<div id="wpicker-pin-display" class="wpicker-pin-display" <?php echo $pin ? '' : 'style="display:none;"'; ?>>
 			<div class="wpicker-pin-code" id="wpicker-pin-code"><?php echo $pin ? esc_html( $pin['pin'] ) : ''; ?></div>
 			<div class="wpicker-pin-expires">
-				<?php
-				if ( $pin ) {
-					echo esc_html(
-						sprintf(
-							/* translators: %s: expiry timestamp. */
-							__( 'Expires %s', 'wpicker' ),
-							$pin['expires_at_gmt']
-						)
-					);
-				}
-				?>
+				<?php esc_html_e( 'Refreshes in:', 'wpicker' ); ?> <strong id="wpicker-pin-countdown">10</strong>s
+			</div>
 			</div>
 		</div>
 	</div>

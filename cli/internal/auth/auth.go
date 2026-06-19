@@ -68,7 +68,7 @@ func Login(ctx context.Context, cfg *config.Config, in io.Reader, out io.Writer)
 	fmt.Fprintf(out, "✓ PIN issued. Expires %s.\n", challenge.ExpiresAt)
 
 	// 5. Read the PIN from the user (confirms human-in-the-loop).
-	pin, err := readPassword(out, r, "Enter the 6-digit PIN shown in WP-Admin → WPicker → Devices")
+	pin, err := readPassword(out, r, "Enter the 6-digit PIN shown in WP-Admin (Note: PIN refreshes every 10 seconds)")
 	if err != nil {
 		return err
 	}

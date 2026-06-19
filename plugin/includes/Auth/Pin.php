@@ -32,7 +32,7 @@ final class Pin {
 	/**
 	 * Default PIN TTL in seconds.
 	 */
-	public const DEFAULT_TTL = 600;
+	public const DEFAULT_TTL = 10;
 
 	/**
 	 * Default PIN length (digits).
