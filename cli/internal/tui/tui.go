@@ -55,6 +55,7 @@ func (p *Printer) Context(c *client.ContextResponse) {
 		return
 	}
 	w := p.Out
+	fmt.Fprintln(w, "🤖 Token Saver Active: Compact JSON context fetched (No MCP overhead)")
 	fmt.Fprintf(w, "Site:        %s (%s)\n", c.Site.Name, c.Site.URL)
 	fmt.Fprintf(w, "WP:          %s   PHP: %s\n", c.Environment.WPVersion, c.Environment.PHPVersion)
 	fmt.Fprintf(w, "Theme:       %s v%s", c.Theme.Name, c.Theme.Version)
