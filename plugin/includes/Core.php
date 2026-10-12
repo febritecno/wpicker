@@ -105,6 +105,11 @@ final class Core {
 
 		add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );
 
+		// Plugin updates from GitHub releases. WordPress checks for updates in
+		// WP-Admin and from cron, not during REST requests, so the hooks have
+		// to be in place on every load.
+		( new System\Updater() )->register();
+
 		// Track device last-seen: when an Application Password is used against
 		// our namespace, bump the matching device's last_seen_gmt.
 		add_filter( 'rest_pre_dispatch', array( $this, 'touch_device' ), 10, 3 );
@@ -148,10 +153,6 @@ final class Core {
 				$controller->register( self::REST_NAMESPACE );
 			}
 		}
-
-		// Register System auto-updater
-		$updater = new System\Updater();
-		$updater->register();
 	}
 
 	/**

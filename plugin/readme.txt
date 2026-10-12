@@ -54,14 +54,22 @@ In `wp-content/uploads/wpicker-vault/<manifest-id>/`, protected from web access 
 == Changelog ==
 
 = 1.1.0 =
+Update the plugin and the CLI together: pairing and file transfer changed, and a 1.0.0 CLI cannot talk to this version.
+
+* Fixed: the REST API failed on every request in 1.0.0, so no CLI command worked.
+* Fixed: plugin updates from GitHub were never offered in WP-Admin.
+* Pairing with the administrator password (plus the PIN shown in WP-Admin), rate limited; the PIN can be regenerated or stopped.
+* Push: health check after applying, with automatic restore if the site starts returning errors; deleted files are deleted on the site; binary files transfer intact.
+* Review mode: hold pushes until an administrator reads the diff and applies or rejects them.
+* Snapshots screen: search, filters, pagination, side-by-side diff, revert a single push, restore, delete, conflict resolution.
+* Backup & Restore: full-site backups as one file; restore onto this site or upload a backup from another one, with addresses rewritten.
+* Diagnostics (off by default): error logs, WordPress debug logging without editing wp-config.php, read-only access to wp-content and to the database without credentials.
+* New admin design, Settings screen, new logo.
+
+= 1.0.0 =
 * Initial public version.
-* PIN + Application Password device pairing.
-* Global Context API.
-* Child-theme pull/push with `php -l` gate.
-* Deployment Vault: snapshot, history, rollback.
-* Admin UI: Devices + Snapshots.
 
 == Upgrade Notice ==
 
 = 1.1.0 =
-First release.
+Fixes the REST API, which did not work in 1.0.0. Update the wpicker CLI to 1.1.0 at the same time.

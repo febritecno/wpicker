@@ -91,10 +91,10 @@ package-plugin: ## Zip the plugin for distribution -> dist/wpicker.zip
 
 .PHONY: package-cli
 package-cli: ## Cross-compile the CLI for darwin/linux -> dist/
-	@rm -rf dist && mkdir -p dist
+	@mkdir -p dist
 	cd $(CLI_DIR) && \
-	  $(GO) build -trimpath -o ../dist/wpicker-darwin-arm64 . && \
-	  $(GO) build -trimpath -o ../dist/wpicker-linux-amd64 . && \
+	  GOOS=darwin GOARCH=arm64 $(GO) build -trimpath -o ../dist/wpicker-darwin-arm64 . && \
+	  GOOS=linux GOARCH=amd64 $(GO) build -trimpath -o ../dist/wpicker-linux-amd64 . && \
 	  echo "Built: dist/wpicker-{darwin-arm64,linux-amd64}"
 
 .PHONY: package
