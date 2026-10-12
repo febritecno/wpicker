@@ -94,11 +94,11 @@ func (p *Printer) History(h *client.HistoryResponse) {
 		return
 	}
 	if h.Count == 0 {
-		fmt.Fprintln(p.Out, "No deployments recorded yet.")
+		fmt.Fprintln(p.Out, "No snapshots yet.")
 		return
 	}
 	rows := tableRows()
-	rows.header("MANIFEST", "TIME (GMT)", "DEVICE", "KIND", "FILES", "STATUS")
+	rows.header("SNAPSHOT", "TIME (GMT)", "DEVICE", "KIND", "FILES", "STATUS")
 	for _, m := range h.Manifests {
 		rows.add(m.ID, m.CreatedAt, m.DeviceName, m.Kind, fmt.Sprintf("%d", m.Count), m.Status)
 	}
@@ -111,9 +111,26 @@ func (p *Printer) Push(r *client.PushResponse) {
 		p.EmitJSON(r)
 		return
 	}
-	fmt.Fprintf(p.Out, "✓ Pushed %d file(s). Manifest: %s\n", r.Count, r.ManifestID)
+	if r.Status == "review" {
+		fmt.Fprintf(p.Out, "⏳ Submitted %d change(s) for review. Snapshot: %s\n", r.Count, r.ManifestID)
+		fmt.Fprintln(p.Out, "  Nothing changed on the site yet. An administrator has to approve it in")
+		fmt.Fprintln(p.Out, "  WP-Admin → WPicker → Snapshots. Check with `wpicker snapshots`.")
+		return
+	}
+	fmt.Fprintf(p.Out, "✓ Pushed %d file(s), deleted %d. Snapshot: %s\n", len(r.Applied), len(r.Deleted), r.ManifestID)
 	for _, f := range r.Applied {
 		fmt.Fprintf(p.Out, "  - %s\n", f)
+	}
+	for _, f := range r.Deleted {
+		fmt.Fprintf(p.Out, "  x %s\n", f)
+	}
+	switch r.Health {
+	case "ok":
+		fmt.Fprintln(p.Out, "  Health check: site is up.")
+	case "unreachable":
+		fmt.Fprintln(p.Out, "  Health check: site could not reach itself — not verified.")
+	case "already_failing":
+		fmt.Fprintln(p.Out, "  Health check: site was already failing before this push — not verified.")
 	}
 }
 

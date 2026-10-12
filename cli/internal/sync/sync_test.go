@@ -3,19 +3,20 @@ package sync
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 func TestWriteAndReadFileAtomic(t *testing.T) {
 	tmp := t.TempDir()
-	if err := WriteFileAtomic(tmp, "sub/dir/hello.txt", "world"); err != nil {
+	if err := WriteFileAtomic(tmp, "sub/dir/hello.txt", []byte("world")); err != nil {
 		t.Fatalf("WriteFileAtomic: %v", err)
 	}
 	got, err := ReadFile(tmp, "sub/dir/hello.txt")
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
-	if got != "world" {
+	if string(got) != "world" {
 		t.Errorf("ReadFile = %q, want %q", got, "world")
 	}
 }
@@ -162,5 +163,56 @@ func TestWriteErrorClearError(t *testing.T) {
 	ClearError(tmp)
 	if _, err := os.Stat(filepath.Join(tmp, LocalDirName, LastErrorName)); !os.IsNotExist(err) {
 		t.Error("error file should be deleted after ClearError")
+	}
+}
+
+func TestComputeChanges_DeletedLocally(t *testing.T) {
+	tmp := t.TempDir()
+	if err := WriteFileAtomic(tmp, "keep.php", []byte("keep")); err != nil {
+		t.Fatal(err)
+	}
+	manifest := &Manifest{Files: map[string]ManifestFile{
+		"keep.php":    {SHA256: HashString("keep")},
+		"gone.php":    {SHA256: HashString("gone")},
+		"drifted.php": {SHA256: HashString("old")},
+	}}
+	remote := map[string]string{
+		"keep.php":    HashString("keep"),
+		"gone.php":    HashString("gone"),
+		"drifted.php": HashString("edited on server"),
+	}
+
+	c, err := ComputeChanges(tmp, manifest, remote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(c.Removed, ","); got != "drifted.php,gone.php" {
+		t.Errorf("Removed = %q", got)
+	}
+	// A file deleted locally whose server copy changed since the pull must
+	// block the push rather than silently destroy the server-side edit.
+	if got := strings.Join(c.Drifted, ","); got != "drifted.php" {
+		t.Errorf("Drifted = %q", got)
+	}
+}
+
+func TestRemoveFile_prunesEmptyParents(t *testing.T) {
+	tmp := t.TempDir()
+	for _, rel := range []string{"a/b/one.php", "a/two.php"} {
+		if err := WriteFileAtomic(tmp, rel, []byte("x")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := RemoveFile(tmp, "a/b/one.php"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(tmp, "a", "b")); !os.IsNotExist(err) {
+		t.Errorf("empty dir a/b should be removed")
+	}
+	if _, err := os.Stat(filepath.Join(tmp, "a", "two.php")); err != nil {
+		t.Errorf("sibling file must survive: %v", err)
+	}
+	if err := RemoveFile(tmp, "missing.php"); err != nil {
+		t.Errorf("removing a missing file should be a no-op, got %v", err)
 	}
 }

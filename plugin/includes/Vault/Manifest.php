@@ -160,10 +160,40 @@ final class Manifest {
 			'device_name'    => $device['name'] ?? '',
 			'files'          => array_values( $files ),
 			'count'          => count( $files ),
-			'status'         => 'pending', // pending|applied|aborted|restored
+			// pending (snapshot taken, outcome not recorded yet) | review (waiting
+			// for approval in WP-Admin) | applied | aborted | restored | rejected |
+			// superseded | reverted (an applied push later undone by a revert).
+			'status'         => 'pending',
+			'changes'        => array(), // [ { path, action: added|modified|deleted } ]
+			'log'            => array(), // [ { time_gmt, event, by, message } ]
 			'restore_count'  => 0,
 			'note'           => '',
 			'error'          => null,
 		);
+	}
+
+	/**
+	 * Append an entry to a manifest's activity log.
+	 *
+	 * @param string $id      Manifest id.
+	 * @param string $event   Machine-readable event (submitted, applied, ...).
+	 * @param string $message Human-readable detail.
+	 * @return void
+	 */
+	public function log( string $id, string $event, string $message = '' ): void {
+		$manifest = $this->get( $id );
+		if ( null === $manifest ) {
+			return;
+		}
+		$user = wp_get_current_user();
+		$log  = is_array( $manifest['log'] ?? null ) ? $manifest['log'] : array();
+		$log[] = array(
+			'time_gmt' => gmdate( 'c' ),
+			'event'    => $event,
+			'by'       => $user && $user->exists() ? $user->user_login : '',
+			'message'  => $message,
+		);
+		$manifest['log'] = $log;
+		$this->update( $id, $manifest );
 	}
 }

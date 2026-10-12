@@ -2,12 +2,10 @@
 /**
  * REST Theme controller — file sync endpoints.
  *
- * Routes (full implementation in M4):
+ * Routes:
  *   GET    /theme/files         list child-theme files
  *   GET    /theme/file          read a single file
  *   POST   /theme/push          upload + lint + snapshot + apply
- *
- * Skeleton present now so the plugin boots; logic completed in milestone 4.
  *
  * @package WPicker\REST
  */
@@ -17,8 +15,7 @@ declare( strict_types = 1 );
 namespace WPicker\REST;
 
 use WPicker\Sync\PathGuard;
-use WPicker\Lint\PhpLint;
-use WPicker\Vault\Manager;
+use WPicker\Sync\Deployer;
 use WP_REST_Request;
 
 defined( 'ABSPATH' ) || exit;
@@ -36,30 +33,21 @@ final class Theme extends Base {
 	private $guard;
 
 	/**
-	 * Linter.
+	 * Deployer.
 	 *
-	 * @var PhpLint
+	 * @var Deployer
 	 */
-	private $lint;
-
-	/**
-	 * Vault manager.
-	 *
-	 * @var Manager
-	 */
-	private $vault;
+	private $deployer;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param PathGuard $guard Path guard.
-	 * @param PhpLint   $lint  Linter.
-	 * @param Manager   $vault Vault manager.
+	 * @param PathGuard $guard    Path guard.
+	 * @param Deployer  $deployer Deployer.
 	 */
-	public function __construct( PathGuard $guard, PhpLint $lint, Manager $vault ) {
-		$this->guard = $guard;
-		$this->lint  = $lint;
-		$this->vault = $vault;
+	public function __construct( PathGuard $guard, Deployer $deployer ) {
+		$this->guard    = $guard;
+		$this->deployer = $deployer;
 	}
 
 	/**
@@ -81,10 +69,15 @@ final class Theme extends Base {
 				'callback'            => array( $this, 'read_file' ),
 				'permission_callback' => array( $this, 'permission' ),
 				'args'                => array(
-					'path' => array(
+					'path'     => array(
 						'type'              => 'string',
 						'required'          => true,
 						'sanitize_callback' => 'sanitize_text_field',
+					),
+					'encoding' => array(
+						'type'     => 'string',
+						'required' => false,
+						'enum'     => array( 'base64' ),
 					),
 				),
 			),
@@ -152,7 +145,11 @@ final class Theme extends Base {
 	}
 
 	/**
-	 * GET /theme/file?path=... — read one file.
+	 * GET /theme/file?path=...[&encoding=base64] — read one file.
+	 *
+	 * Without `encoding` the contents are returned as a plain string, which
+	 * only round-trips for UTF-8 text. Clients that need binary-safe transfer
+	 * (images, fonts) must ask for base64.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return \WP_REST_Response
@@ -167,126 +164,55 @@ final class Theme extends Base {
 		if ( false === $contents ) {
 			return $this->fail( 'wpicker_file_unreadable', 'Could not read file.', 500 );
 		}
+		$base64 = 'base64' === $request->get_param( 'encoding' );
 		return $this->ok(
 			array(
 				'path'     => $rel,
 				'size'     => strlen( $contents ),
 				'sha256'   => hash( 'sha256', $contents ),
-				'contents' => $contents,
+				'encoding' => $base64 ? 'base64' : 'utf8',
+				'contents' => $base64 ? base64_encode( $contents ) : $contents,
 			)
 		);
 	}
 
 	/**
-	 * POST /theme/push — snapshot → lint → apply, with preventive rollback.
+	 * POST /theme/push — validate + lint, then either apply right away
+	 * (push mode "direct") or hold for approval in WP-Admin ("review").
 	 *
-	 * Body: { files: [ { path, contents }, ... ], device?: {...} }
+	 * Body: {
+	 *   files:  [ { path, contents, encoding?: "base64" }, ... ],
+	 *   delete: [ path, ... ],
+	 *   device?: {...}
+	 * }
+	 *
+	 * Responds 201 when applied, 202 when held for review.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return \WP_REST_Response
 	 */
 	public function push( WP_REST_Request $request ): \WP_REST_Response {
-		if ( ! $this->guard->has_child_theme() ) {
-			return $this->fail( 'wpicker_no_child_theme', 'No active child theme.', 400 );
+		$body = (array) $request->get_json_params();
+		$plan = $this->deployer->plan( $body );
+		if ( isset( $plan['error'] ) ) {
+			return $this->fail_from( $plan['error'] );
 		}
 
-		$body  = $request->get_json_params();
-		$files = $body['files'] ?? array();
-		if ( ! is_array( $files ) || array() === $files ) {
-			return $this->fail( 'wpicker_no_files', 'No files supplied.', 400 );
+		// Nothing is written — not even to the review queue — unless it parses.
+		$lint = $this->deployer->lint( $plan['files'] );
+		if ( null !== $lint ) {
+			return $this->fail_from( $lint['error'] );
 		}
 
-		// 1) Validate + resolve every path FIRST. Abort before touching anything.
-		$plan = array();
-		foreach ( $files as $entry ) {
-			$path     = (string) ( $entry['path'] ?? '' );
-			$contents = (string) ( $entry['contents'] ?? '' );
-			$abs      = $this->guard->resolve( $path );
-			if ( null === $abs ) {
-				return $this->fail(
-					'wpicker_path_blocked',
-					'Refused path outside child theme or blocked basename.',
-					400,
-					array( 'file' => $path )
-				);
-			}
-			$plan[] = array(
-				'rel'      => $path,
-				'abs'      => $abs,
-				'contents' => $contents,
-				'is_php'   => ( substr( $path, -4 ) === '.php' ),
-			);
-		}
-
-		// 2) Lint every incoming PHP file to a temp location before writing.
-		$settings = get_option( 'wpicker_settings', array() );
-		$lint_on  = (int) ( $settings['lint_enabled'] ?? 1 ) === 1;
-		if ( $lint_on ) {
-			foreach ( $plan as $p ) {
-				if ( ! $p['is_php'] ) {
-					continue;
-				}
-				$result = $this->lint->lint_source( $p['contents'] );
-				if ( ! $result['ok'] ) {
-					return $this->fail(
-						$result['code'] ?? 'wpicker_lint_syntax',
-						$result['message'] ?? 'Lint failure.',
-						422,
-						array(
-							'file' => $p['rel'],
-							'line' => $result['line'] ?? null,
-						)
-					);
-				}
-			}
-		}
-
-		// 3) Snapshot the current child theme (atomic safety net).
 		$device = (array) ( $body['device'] ?? array( 'name' => 'unknown' ) );
-		try {
-			$shot = $this->vault->snapshot( $device, array_column( $plan, 'rel' ) );
-		} catch ( \Throwable $e ) {
-			return $this->fail( 'wpicker_snapshot_failed', $e->getMessage(), 500 );
+		$review = 'review' === $this->deployer->mode();
+		$result = $review
+			? $this->deployer->hold( $plan['files'], $plan['remove'], $device )
+			: $this->deployer->execute( $plan['files'], $plan['remove'], $device );
+
+		if ( isset( $result['error'] ) ) {
+			return $this->fail_from( $result['error'] );
 		}
-
-		// 4) Apply files atomically (write to temp then rename).
-		$applied = array();
-		foreach ( $plan as $p ) {
-			$dir = dirname( $p['abs'] );
-			if ( ! is_dir( $dir ) && ! wp_mkdir_p( $dir ) ) {
-				$this->vault->mark_aborted(
-					$shot['id'],
-					array(
-						'code'    => 'wpicker_mkdir_failed',
-						'message' => 'Could not create directory: ' . dirname( $p['rel'] ),
-						'file'    => $p['rel'],
-					)
-				);
-				return $this->fail( 'wpicker_mkdir_failed', 'Could not create directory.', 500, array( 'file' => $p['rel'], 'manifest_id' => $shot['id'] ) );
-			}
-			$tmp = $p['abs'] . '.wpicker-tmp';
-			if ( false === file_put_contents( $tmp, $p['contents'] ) ) {
-				$this->vault->mark_aborted( $shot['id'], array( 'code' => 'wpicker_write_failed', 'message' => 'Could not write file.', 'file' => $p['rel'] ) );
-				return $this->fail( 'wpicker_write_failed', 'Could not write file.', 500, array( 'file' => $p['rel'], 'manifest_id' => $shot['id'] ) );
-			}
-			@chmod( $tmp, 0644 & ~umask() );
-			if ( ! @rename( $tmp, $p['abs'] ) ) {
-				@unlink( $tmp );
-				$this->vault->mark_aborted( $shot['id'], array( 'code' => 'wpicker_rename_failed', 'message' => 'Could not apply file.', 'file' => $p['rel'] ) );
-				return $this->fail( 'wpicker_rename_failed', 'Could not apply file.', 500, array( 'file' => $p['rel'], 'manifest_id' => $shot['id'] ) );
-			}
-			$applied[] = $p['rel'];
-		}
-
-		$this->vault->mark_applied( $shot['id'] );
-
-		return $this->ok(
-			array(
-				'manifest_id' => $shot['id'],
-				'applied'     => $applied,
-				'count'       => count( $applied ),
-			),
-			201
-		);
+		return $this->ok( $result['data'], $review ? 202 : 201 );
 	}
 }

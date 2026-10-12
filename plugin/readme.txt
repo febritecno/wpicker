@@ -59,7 +59,7 @@ In `wp-content/uploads/wpicker-vault/<manifest-id>/`, protected from web access 
 * Global Context API.
 * Child-theme pull/push with `php -l` gate.
 * Deployment Vault: snapshot, history, rollback.
-* Admin UI: Devices + Vault/History.
+* Admin UI: Devices + Snapshots.
 
 == Upgrade Notice ==
 

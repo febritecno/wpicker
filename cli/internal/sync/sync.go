@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -23,6 +24,33 @@ import (
 type Manifest struct {
 	Stylesheet string                  `json:"stylesheet"`
 	Files      map[string]ManifestFile `json:"files"`
+	// Pending is what a push held for review will turn each path into once an
+	// administrator approves it (an empty SHA256 means "deleted"). Until then
+	// the site still has the old content, so Files cannot be updated yet.
+	Pending map[string]ManifestFile `json:"pending,omitempty"`
+}
+
+// promotePending moves entries from Pending into Files once the site shows
+// the submitted content, i.e. the held push was approved. It reports whether
+// anything moved.
+func (m *Manifest) promotePending(root string, remote map[string]string) bool {
+	moved := false
+	for rel, want := range m.Pending {
+		hash, onSite := remote[rel]
+		switch {
+		case want.SHA256 == "" && !onSite:
+			delete(m.Files, rel)
+			promotePendingBase(root, rel, true)
+		case want.SHA256 != "" && onSite && hash == want.SHA256:
+			m.Files[rel] = want
+			promotePendingBase(root, rel, false)
+		default:
+			continue // still waiting, or rejected
+		}
+		delete(m.Pending, rel)
+		moved = true
+	}
+	return moved
 }
 
 // ManifestFile captures the local hash + size of one pulled file.
@@ -164,28 +192,45 @@ func HashFile(abs string) (string, error) {
 
 // HashString computes the sha256 hex digest of a string.
 func HashString(s string) string {
-	h := sha256.Sum256([]byte(s))
+	return HashBytes([]byte(s))
+}
+
+// HashBytes computes the sha256 hex digest of raw bytes.
+func HashBytes(b []byte) string {
+	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:])
 }
 
-// ReadFile reads a file relative to root.
-func ReadFile(root, rel string) (string, error) {
-	data, err := os.ReadFile(filepath.Join(root, rel))
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
+// ReadFile reads the raw bytes of a file relative to root.
+func ReadFile(root, rel string) ([]byte, error) {
+	return os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
 }
 
 // WriteFileAtomic writes contents to root/rel via a temp file + rename.
 // Creates parent directories as needed.
-func WriteFileAtomic(root, rel, contents string) error {
+func WriteFileAtomic(root, rel string, contents []byte) error {
 	abs := filepath.Join(root, filepath.FromSlash(rel))
 	dir := filepath.Dir(abs)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	return writeFileAtomic(abs, []byte(contents), 0o644)
+	return writeFileAtomic(abs, contents, 0o644)
+}
+
+// RemoveFile deletes root/rel and then any parent directories it leaves
+// empty, stopping at root.
+func RemoveFile(root, rel string) error {
+	abs := filepath.Join(root, filepath.FromSlash(rel))
+	if err := os.Remove(abs); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	rootAbs := filepath.Clean(root)
+	for dir := filepath.Dir(abs); dir != rootAbs && strings.HasPrefix(dir, rootAbs+string(filepath.Separator)); dir = filepath.Dir(dir) {
+		if os.Remove(dir) != nil {
+			break // not empty
+		}
+	}
+	return nil
 }
 
 // writeFileAtomic is the low-level temp+rename writer.
@@ -205,7 +250,7 @@ func writeFileAtomic(abs string, data []byte, mode os.FileMode) error {
 //
 //   - added:   in local tree, not in manifest (or remote),
 //   - modified: hash differs from manifest,
-//   - removed: in manifest, not in local tree.
+//   - removed: in manifest, not in local tree (deleted locally since the pull).
 //
 // remote is the server's current file map (path → sha256). It is used to
 // detect drift (local diverged from BOTH manifest and remote).
@@ -213,7 +258,7 @@ type Changes struct {
 	Added    []string
 	Modified []string
 	Removed  []string
-	Drifted  []string // changed locally AND differently on the server
+	Drifted  []string // changed or deleted locally AND changed on the server
 }
 
 // ComputeChanges walks the local tree and compares against manifest + remote.
@@ -247,11 +292,18 @@ func ComputeChanges(root string, manifest *Manifest, remote map[string]string) (
 		}
 	}
 
-	for path := range manifest.Files {
-		if !seen[path] {
-			c.Removed = append(c.Removed, path)
+	for path, prev := range manifest.Files {
+		if seen[path] || IsIgnored(path) {
+			continue
+		}
+		c.Removed = append(c.Removed, path)
+		// Drift: deleted locally, but the server copy changed since the pull.
+		if rh, ok := remote[path]; ok && rh != prev.SHA256 {
+			c.Drifted = append(c.Drifted, path)
 		}
 	}
+	sort.Strings(c.Removed)
+	sort.Strings(c.Drifted)
 
 	return c, nil
 }

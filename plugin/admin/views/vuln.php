@@ -30,8 +30,8 @@ if ( $action === 'download' && current_user_can( 'manage_options' ) ) {
 }
 ?>
 
-<div class="wrap wpicker-wrap">
-	<h1><?php esc_html_e( 'WPicker - Vulnerability Scanner', 'wpicker' ); ?></h1>
+<div class="wrap wpicker-admin">
+	<?php $this->render_header( \WPicker\Admin\Dashboard::SLUG_VULN ); ?>
 	<p><?php esc_html_e( 'Scan your installed plugins against the WPVulnerability.net database.', 'wpicker' ); ?></p>
 
 	<div class="card" style="max-width: 800px; margin-top: 20px;">

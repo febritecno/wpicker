@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -40,61 +39,6 @@ var themeCmd = &cobra.Command{
 	Short: "Sync the active child theme between local and site.",
 }
 
-// theme pull -----------------------------------------------------------------
-
-var pullCmd = &cobra.Command{
-	Use:   "pull",
-	Short: "Download the latest child-theme files from the site.",
-	Long: `Pulls every file in the site's active child theme into the current directory
-(overwriting local copies) and records a hash manifest at ./.wpicker/last-pull.json
-so that subsequent ` + "`wpicker theme push`" + ` can detect local changes.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		c, _, err := mustClient()
-		if err != nil {
-			return err
-		}
-		root := pullOut
-		if root == "" {
-			root = "."
-		}
-		abs, _ := filepath.Abs(root)
-
-		files, err := c.ListFiles(ctxFrom(cmd))
-		if err != nil {
-			return err
-		}
-		if !flagJSON {
-			fmt.Fprintf(os.Stderr, "Pulling %d file(s) from stylesheet %q into %s…\n", files.Count, files.Stylesheet, abs)
-		}
-
-		manifest := &sync.Manifest{
-			Stylesheet: files.Stylesheet,
-			Files:      map[string]sync.ManifestFile{},
-		}
-		for _, entry := range files.Files {
-			file, err := c.ReadFile(ctxFrom(cmd), entry.Path)
-			if err != nil {
-				return fmt.Errorf("read %s: %w", entry.Path, err)
-			}
-			if err := sync.WriteFileAtomic(root, entry.Path, file.Contents); err != nil {
-				return fmt.Errorf("write %s: %w", entry.Path, err)
-			}
-			manifest.Files[entry.Path] = sync.ManifestFile{
-				SHA256: file.SHA256,
-				Size:   int64(file.Size),
-			}
-			if !flagJSON {
-				fmt.Fprintf(os.Stderr, "  - %s\n", entry.Path)
-			}
-		}
-		if err := sync.SaveManifest(root, manifest); err != nil {
-			return err
-		}
-		tui.New(os.Stdout, flagJSON).Linef("✓ Pulled %d file(s).", files.Count)
-		return nil
-	},
-}
-
 // theme push -----------------------------------------------------------------
 
 var pushCmd = &cobra.Command{
@@ -102,12 +46,14 @@ var pushCmd = &cobra.Command{
 	Short: "Upload local child-theme changes to the site (with lint + snapshot).",
 	Long: `Pushes locally-changed files to the site's child theme. Before applying, the
 plugin:
-  1. snapshots the current child theme (Deployment Vault),
-  2. runs ` + "`php -l`" + ` on every incoming .php file (lint gate),
-  3. applies files atomically.
+  1. runs ` + "`php -l`" + ` on every incoming .php file (lint gate),
+  2. snapshots the current child theme (Deployment Vault),
+  3. applies the files, and deletes the ones you deleted locally,
+  4. requests the site from itself; if it now answers 5xx (a fatal error the
+     lint gate cannot see), the snapshot is restored automatically.
 
 On failure, a structured error is written to ./.wpicker/last-error.json so an
-AI agent can inspect, fix, and re-push — or roll back.`,
+AI agent can inspect, fix, and re-push.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c, cfg, err := mustClient()
 		if err != nil {
@@ -123,85 +69,110 @@ AI agent can inspect, fix, and re-push — or roll back.`,
 			return fmt.Errorf("load local manifest: %w (run `wpicker theme pull` first)", err)
 		}
 
-		// Build the remote hash map for drift detection.
-		remote := map[string]string{}
-		if rf, err := c.ListFiles(ctxFrom(cmd)); err == nil {
-			for _, f := range rf.Files {
-				remote[f.Path] = f.SHA256
-			}
-		}
-
-		changes, err := sync.ComputeChanges(root, manifest, remote)
+		rf, err := c.ListFiles(ctxFrom(cmd))
 		if err != nil {
 			return err
 		}
+		remote, sizes := remoteMaps(rf)
 
-		// Collect the files to push.
+		st, err := sync.ComputeStatus(root, manifest, remote)
+		if err != nil {
+			return err
+		}
+		if err := saveIfDirty(root, manifest, st, remote, sizes); err != nil {
+			return err
+		}
+
+		if len(st.Conflicts) > 0 {
+			fmt.Fprintln(os.Stderr, "⚠ Drift detected — these files changed both locally and on the site:")
+			for _, ch := range st.Conflicts {
+				fmt.Fprintf(os.Stderr, "    %s\n", ch.Path)
+			}
+			fmt.Fprintln(os.Stderr, "  Run `wpicker theme pull` to merge them with your changes, then push again.")
+			return errors.New("refusing to push drifted files without a pull")
+		}
+		if pushAll && len(st.Incoming) > 0 {
+			fmt.Fprintln(os.Stderr, "⚠ The site has changes you have not pulled; --all would overwrite them:")
+			for _, ch := range st.Incoming {
+				fmt.Fprintf(os.Stderr, "    %s\n", ch.Path)
+			}
+			return errors.New("refusing to push --all over unpulled site changes")
+		}
+
+		// Collect the files to push. Hashes are of the raw bytes, which is
+		// what the server stores and reports back in /theme/files.
 		var toPush []client.PushFile
+		var unmerged []string
+		pushed := map[string]sync.ManifestFile{}
+		contents := map[string][]byte{}
 		push := func(rel string) error {
-			contents, err := sync.ReadFile(root, rel)
+			data, err := sync.ReadFile(root, rel)
 			if err != nil {
 				return err
 			}
-			toPush = append(toPush, client.PushFile{Path: rel, Contents: contents})
+			// A merge left both versions in the file for someone to settle.
+			// Deployed as it is, it would be a syntax error at best.
+			if sync.IsText(data) && sync.HasConflictMarkers(data) {
+				unmerged = append(unmerged, rel)
+			}
+			toPush = append(toPush, client.NewPushFile(rel, data))
+			pushed[rel] = sync.ManifestFile{SHA256: sync.HashBytes(data), Size: int64(len(data))}
+			contents[rel] = data
 			return nil
 		}
 
-		for _, rel := range changes.Added {
-			if err := push(rel); err != nil {
-				return err
+		// Files pulled earlier and deleted locally since are deleted remotely.
+		var targets, toDelete []string
+		for _, ch := range st.Outgoing {
+			if ch.Local == sync.Deleted {
+				toDelete = append(toDelete, ch.Path)
+			} else {
+				targets = append(targets, ch.Path)
 			}
-		}
-		for _, rel := range changes.Modified {
-			if err := push(rel); err != nil {
-				return err
-			}
-		}
-
-		if len(changes.Drifted) > 0 {
-			fmt.Fprintln(os.Stderr, "⚠ Drift detected — these files changed both locally and on the site:")
-			for _, rel := range changes.Drifted {
-				fmt.Fprintf(os.Stderr, "    %s\n", rel)
-			}
-			fmt.Fprintln(os.Stderr, "  Run `wpicker theme pull` first to reconcile, then push again.")
-			return errors.New("refusing to push drifted files without a pull")
-		}
-
-		if !pushAll && len(toPush) == 0 {
-			tui.New(os.Stdout, flagJSON).Line("No local changes to push.")
-			return nil
 		}
 		if pushAll {
 			// Include every local file (still confined by the server).
-			localFiles, err := sync.WalkLocal(root)
-			if err != nil {
+			if targets, err = sync.WalkLocal(root); err != nil {
 				return err
 			}
-			toPush = toPush[:0]
-			for _, rel := range localFiles {
-				if err := push(rel); err != nil {
-					return err
-				}
+		}
+		for _, rel := range targets {
+			if err := push(rel); err != nil {
+				return err
 			}
 		}
 
+		if len(toPush) == 0 && len(toDelete) == 0 {
+			tui.New(os.Stdout, flagJSON).Line("No local changes to push.")
+			return nil
+		}
+		if len(unmerged) > 0 {
+			fmt.Fprintln(os.Stderr, "⚠ Unresolved merge — these files still contain conflict markers (<<<<<<< … >>>>>>>):")
+			for _, rel := range unmerged {
+				fmt.Fprintf(os.Stderr, "    %s\n", rel)
+			}
+			fmt.Fprintln(os.Stderr, "  Settle each block and remove the marker lines, then push again.")
+			return errors.New("refusing to push files with unresolved conflict markers")
+		}
+
 		if pushDryRun {
-			tui.New(os.Stdout, flagJSON).Linef("DRY RUN: would push %d file(s):", len(toPush))
+			tui.New(os.Stdout, flagJSON).Linef("DRY RUN: would push %d file(s), delete %d:", len(toPush), len(toDelete))
 			for _, pf := range toPush {
 				fmt.Fprintf(os.Stderr, "  - %s\n", pf.Path)
+			}
+			for _, rel := range toDelete {
+				fmt.Fprintf(os.Stderr, "  x %s\n", rel)
 			}
 			return nil
 		}
 
 		if !flagJSON {
-			fmt.Fprintf(os.Stderr, "Pushing %d file(s)…\n", len(toPush))
-			for _, pf := range toPush {
-				fmt.Fprintf(os.Stderr, "  - %s\n", pf.Path)
-			}
+			fmt.Fprintf(os.Stderr, "Pushing %d file(s), deleting %d…\n", len(toPush), len(toDelete))
 		}
 
 		res, err := c.Push(ctxFrom(cmd), client.PushRequest{
-			Files: toPush,
+			Files:  toPush,
+			Delete: toDelete,
 			Device: map[string]string{
 				"id":   cfg.DeviceID,
 				"name": cfg.DeviceName,
@@ -212,13 +183,16 @@ AI agent can inspect, fix, and re-push — or roll back.`,
 			errBody := map[string]any{
 				"command": "theme push",
 				"files":   pathsOf(toPush),
+				"deleted": toDelete,
 			}
 			if re, ok := client.IsRestError(err); ok {
 				errBody["server_error"] = map[string]any{
-					"code":    re.Details.Code,
-					"message": re.Details.Message,
-					"file":    re.Details.File,
-					"line":    re.Details.Line,
+					"code":        re.Details.Code,
+					"message":     re.Details.Message,
+					"file":        re.Details.File,
+					"line":        re.Details.Line,
+					"manifest_id": re.Details.ManifestID,
+					"rolled_back": re.Details.RolledBack,
 				}
 			} else {
 				errBody["message"] = err.Error()
@@ -227,13 +201,36 @@ AI agent can inspect, fix, and re-push — or roll back.`,
 			return err
 		}
 
+		// Held for review: the site is unchanged, so the local manifest must
+		// not claim these files are in sync. Once approved, `theme status`
+		// sees both sides agree and settles the manifest by itself.
+		if res.Status == "review" {
+			sync.ClearError(root)
+			manifest.Pending = map[string]sync.ManifestFile{}
+			for rel, entry := range pushed {
+				manifest.Pending[rel] = entry
+				_ = sync.SavePending(root, rel, contents[rel])
+			}
+			for _, rel := range toDelete {
+				manifest.Pending[rel] = sync.ManifestFile{}
+			}
+			if err := sync.SaveManifest(root, manifest); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not update local manifest: %v\n", err)
+			}
+			tui.New(os.Stdout, flagJSON).Push(res)
+			return nil
+		}
+
 		// Success: clear any stale error and update the local manifest.
 		sync.ClearError(root)
-		for _, pf := range toPush {
-			manifest.Files[pf.Path] = sync.ManifestFile{
-				SHA256: sync.HashString(pf.Contents),
-				Size:   int64(len(pf.Contents)),
-			}
+		st.Settle(root, manifest, remote, sizes)
+		for rel, entry := range pushed {
+			manifest.Files[rel] = entry
+			_ = sync.SaveBase(root, rel, contents[rel])
+		}
+		for _, rel := range toDelete {
+			delete(manifest.Files, rel)
+			sync.RemoveBase(root, rel)
 		}
 		if err := sync.SaveManifest(root, manifest); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not update local manifest: %v\n", err)
@@ -253,10 +250,9 @@ func pathsOf(files []client.PushFile) []string {
 }
 
 func init() {
-	pullCmd.Flags().StringVar(&pullOut, "out", "", "destination directory (default: current dir)")
 	pushCmd.Flags().StringVar(&pullOut, "out", "", "source directory (default: current dir)")
 	pushCmd.Flags().BoolVar(&pushDryRun, "dry-run", false, "show what would be pushed without sending")
 	pushCmd.Flags().BoolVar(&pushAll, "all", false, "push every local file, not just changes")
 
-	themeCmd.AddCommand(pullCmd, pushCmd, filesCmd)
+	themeCmd.AddCommand(pushCmd, filesCmd)
 }

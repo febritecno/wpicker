@@ -1,7 +1,10 @@
 package client
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -211,5 +214,107 @@ func TestContract_DecodeEnvelope(t *testing.T) {
 	}
 	if res.PIN != "123456" || res.TTL != 600 {
 		t.Errorf("parsed response invalid: %+v", res)
+	}
+}
+
+// TestContract_BinaryRoundTrip verifies files travel base64-encoded in both
+// directions, so bytes that are not valid UTF-8 arrive unchanged.
+func TestContract_BinaryRoundTrip(t *testing.T) {
+	raw := []byte{0x00, 0xff, 0xfe, 0x89, 'P', 'N', 'G', 0x0a}
+
+	var got PushRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost {
+			_ = json.NewDecoder(r.Body).Decode(&got)
+			w.Write([]byte(`{"ok":true,"data":{"manifest_id":"m","applied":["a.png"],"deleted":["old.php"],"count":2,"health":"ok"}}`))
+			return
+		}
+		if r.URL.Query().Get("encoding") != "base64" || r.URL.Query().Get("path") != "img/a b.png" {
+			t.Errorf("unexpected query: %s", r.URL.RawQuery)
+		}
+		body, _ := json.Marshal(map[string]any{"ok": true, "data": map[string]any{
+			"path": "img/a b.png", "size": len(raw), "encoding": "base64",
+			"contents": base64.StdEncoding.EncodeToString(raw),
+		}})
+		w.Write(body)
+	}))
+	defer srv.Close()
+	c := New(srv.URL, "user", "pass", srv.Client())
+
+	file, err := c.ReadFile(context.Background(), "img/a b.png")
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if !bytes.Equal(file.Contents, raw) {
+		t.Errorf("pulled bytes = %v, want %v", file.Contents, raw)
+	}
+
+	res, err := c.Push(context.Background(), PushRequest{
+		Files:  []PushFile{NewPushFile("a.png", raw)},
+		Delete: []string{"old.php"},
+	})
+	if err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	sent, _ := base64.StdEncoding.DecodeString(got.Files[0].Contents)
+	if got.Files[0].Encoding != "base64" || !bytes.Equal(sent, raw) {
+		t.Errorf("pushed file not base64 of the raw bytes: %+v", got.Files[0])
+	}
+	if len(got.Delete) != 1 || got.Delete[0] != "old.php" {
+		t.Errorf("Delete = %v", got.Delete)
+	}
+	if res.Health != "ok" || len(res.Deleted) != 1 {
+		t.Errorf("response not parsed: %+v", res)
+	}
+}
+
+// TestContract_PairingSendsCredentialsInBody verifies login does not rely on
+// Basic auth, which core only accepts for Application Passwords.
+func TestContract_PairingSendsCredentialsInBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, _, ok := r.BasicAuth(); ok {
+			t.Errorf("%s must not send Basic auth", r.URL.Path)
+		}
+		var body map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if r.Method != http.MethodPost || body["username"] != "admin" || body["password"] != "s3cret" {
+			t.Errorf("%s %s body = %v", r.Method, r.URL.Path, body)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true,"data":{"user_id":1,"ttl":120,"device_id":"d","app_password":"ap"}}`))
+	}))
+	defer srv.Close()
+	c := New(srv.URL, "", "", srv.Client())
+
+	ch, _, err := c.Challenge(context.Background(), "admin", "s3cret")
+	if err != nil || ch.TTL != 120 {
+		t.Fatalf("Challenge: %+v, %v", ch, err)
+	}
+	reg, _, err := c.Register(context.Background(), "admin", "s3cret", RegisterRequest{PIN: "123456"})
+	if err != nil || reg.AppPassword != "ap" {
+		t.Fatalf("Register: %+v, %v", reg, err)
+	}
+}
+
+// TestContract_Error_HealthFailed verifies the auto-rollback error carries
+// what an agent needs: where the fatal is and that the site was restored.
+func TestContract_Error_HealthFailed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(422)
+		w.Write([]byte(`{"ok":false,"error":{"code":"wpicker_health_failed","message":"Site returned HTTP 500","manifest_id":"m1","rolled_back":true,"http_status":500,"file":"functions.php","line":29}}`))
+	}))
+	defer srv.Close()
+	c := New(srv.URL, "user", "pass", srv.Client())
+
+	_, err := c.Push(context.Background(), PushRequest{})
+	re, ok := IsRestError(err)
+	if !ok {
+		t.Fatalf("want RESTError, got %v", err)
+	}
+	d := re.Details
+	if d.Code != "wpicker_health_failed" || !d.RolledBack || d.File != "functions.php" || d.Line != 29 || d.ManifestID != "m1" {
+		t.Errorf("details = %+v", d)
 	}
 }

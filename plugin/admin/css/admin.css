@@ -1,54 +1,1346 @@
-/* WPicker admin styles */
+/* WPicker admin. Scoped to .wpicker-admin so nothing leaks into WP-Admin. */
+
+.wpicker-admin {
+	--wpk-ink: #16191d;
+	--wpk-ink-soft: #5b6470;
+	--wpk-line: #e3e6ea;
+	--wpk-surface: #ffffff;
+	--wpk-canvas: #f6f7f9;
+	--wpk-accent: #2f5bea;
+	--wpk-accent-soft: #eaf0ff;
+	--wpk-ok: #177245;
+	--wpk-ok-soft: #e4f5ec;
+	--wpk-warn: #9a5b00;
+	--wpk-warn-soft: #fff3d6;
+	--wpk-bad: #b3261e;
+	--wpk-bad-soft: #fdeceb;
+	--wpk-radius: 10px;
+	--wpk-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	color: var(--wpk-ink);
+	max-width: 1320px;
+}
+
+/* Several components set display:flex/grid, which would beat the hidden attribute. */
+.wpicker-admin [hidden] {
+	display: none !important;
+}
+
+.wpicker-admin .wpicker-muted {
+	color: var(--wpk-ink-soft);
+}
+
+/* ---- Header ------------------------------------------------------------ */
+
+.wpicker-admin .wpicker-header {
+	margin: 12px 0 20px;
+	border-bottom: 1px solid var(--wpk-line);
+}
+
+.wpicker-admin .wpicker-brand {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 14px;
+}
+
+.wpicker-admin .wpicker-brand-mark {
+	flex: 0 0 44px;
+	width: 44px;
+	height: 44px;
+	object-fit: contain;
+}
+
+.wpicker-admin .wpicker-brand-name {
+	margin: 0;
+	padding: 0;
+	font-size: 20px;
+	font-weight: 650;
+	line-height: 1.2;
+}
+
+.wpicker-admin .wpicker-brand-tagline {
+	margin: 0;
+	color: var(--wpk-ink-soft);
+}
+
+.wpicker-admin .wpicker-version {
+	margin-left: auto;
+	padding: 2px 8px;
+	font-family: var(--wpk-mono);
+	font-size: 12px;
+	color: var(--wpk-ink-soft);
+	background: var(--wpk-canvas);
+	border: 1px solid var(--wpk-line);
+	border-radius: 999px;
+}
+
+.wpicker-admin .wpicker-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.wpicker-admin .wpicker-tab {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 9px 14px;
+	margin-bottom: -1px;
+	color: var(--wpk-ink-soft);
+	font-weight: 500;
+	text-decoration: none;
+	border-bottom: 2px solid transparent;
+}
+
+.wpicker-admin .wpicker-tab:hover {
+	color: var(--wpk-ink);
+}
+
+.wpicker-admin .wpicker-tab:focus-visible,
+.wpicker-admin .wpicker-row:focus-visible,
+.wpicker-admin .wpicker-chip:focus-visible,
+.wpicker-admin .wpicker-file:focus-visible {
+	outline: 2px solid var(--wpk-accent);
+	outline-offset: -2px;
+	box-shadow: none;
+}
+
+.wpicker-admin .wpicker-tab.is-active {
+	color: var(--wpk-accent);
+	border-bottom-color: var(--wpk-accent);
+}
+
+.wpicker-admin .wpicker-tab-count {
+	min-width: 18px;
+	padding: 0 5px;
+	font-size: 11px;
+	font-weight: 700;
+	line-height: 18px;
+	text-align: center;
+	color: #fff;
+	background: var(--wpk-warn);
+	border-radius: 999px;
+}
+
+/* ---- Cards, stats ------------------------------------------------------ */
+
+.wpicker-admin .wpicker-card,
+.wpicker-admin .wpicker-panel,
+.wpicker-admin .wpicker-stat {
+	background: var(--wpk-surface);
+	border: 1px solid var(--wpk-line);
+	border-radius: var(--wpk-radius);
+}
+
+.wpicker-admin .wpicker-card {
+	max-width: 760px;
+	padding: 18px 22px;
+	margin: 0 0 16px;
+}
+
+.wpicker-admin .wpicker-card h2 {
+	margin: 0 0 4px;
+	font-size: 15px;
+}
+
+.wpicker-admin .wpicker-section-title {
+	margin: 24px 0 10px;
+	font-size: 15px;
+}
+
+.wpicker-admin .wpicker-stats {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+	gap: 12px;
+	margin-bottom: 16px;
+}
+
+.wpicker-admin .wpicker-stat {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 14px 16px;
+}
+
+.wpicker-admin .wpicker-stat.is-attention {
+	background: var(--wpk-warn-soft);
+	border-color: #f0d590;
+}
+
+.wpicker-admin .wpicker-stat-value {
+	font-size: 26px;
+	font-weight: 650;
+	line-height: 1.15;
+	font-variant-numeric: tabular-nums;
+}
+
+.wpicker-admin .wpicker-stat-text {
+	font-size: 20px;
+}
+
+.wpicker-admin .wpicker-stat-label {
+	color: var(--wpk-ink-soft);
+	font-size: 12px;
+}
+
+/* ---- Toolbar ----------------------------------------------------------- */
+
+.wpicker-admin .wpicker-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 12px;
+}
+
+.wpicker-admin .wpicker-search {
+	flex: 1 1 260px;
+	min-height: 36px;
+	padding: 0 12px;
+	border: 1px solid var(--wpk-line);
+	border-radius: 8px;
+}
+
+.wpicker-admin .wpicker-toolbar select {
+	min-height: 36px;
+	border-color: var(--wpk-line);
+	border-radius: 8px;
+}
+
+.wpicker-admin .wpicker-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.wpicker-admin .wpicker-chip {
+	padding: 6px 11px;
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--wpk-ink-soft);
+	background: var(--wpk-surface);
+	border: 1px solid var(--wpk-line);
+	border-radius: 999px;
+	cursor: pointer;
+}
+
+.wpicker-admin .wpicker-chip span {
+	margin-left: 3px;
+	opacity: 0.7;
+	font-variant-numeric: tabular-nums;
+}
+
+.wpicker-admin .wpicker-chip:hover {
+	color: var(--wpk-ink);
+	border-color: #c9ced6;
+}
+
+.wpicker-admin .wpicker-chip.is-active {
+	color: var(--wpk-accent);
+	background: var(--wpk-accent-soft);
+	border-color: var(--wpk-accent);
+}
+
+/* ---- Table ------------------------------------------------------------- */
+
+.wpicker-admin .wpicker-panel {
+	overflow-x: auto;
+}
+
+.wpicker-admin .wpicker-table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.wpicker-admin .wpicker-table th {
+	padding: 10px 14px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.05em;
+	text-align: left;
+	text-transform: uppercase;
+	color: var(--wpk-ink-soft);
+	background: var(--wpk-canvas);
+	border-bottom: 1px solid var(--wpk-line);
+}
+
+.wpicker-admin .wpicker-table td {
+	padding: 11px 14px;
+	white-space: nowrap;
+	vertical-align: middle;
+	border-bottom: 1px solid var(--wpk-line);
+}
+
+.wpicker-admin .wpicker-table td.wpicker-wrap {
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
+.wpicker-admin .wpicker-table tr:last-child td {
+	border-bottom: 0;
+}
+
+.wpicker-admin .wpicker-row {
+	cursor: pointer;
+}
+
+.wpicker-admin .wpicker-row:hover td {
+	background: #fafbfc;
+}
+
+.wpicker-admin .wpicker-row.is-selected td {
+	background: var(--wpk-accent-soft);
+}
+
+.wpicker-admin .wpicker-col-actions {
+	width: 1%;
+	white-space: nowrap;
+	text-align: right;
+}
+
+.wpicker-admin .wpicker-id {
+	display: block;
+	white-space: nowrap;
+	padding: 0;
+	font-family: var(--wpk-mono);
+	font-size: 12px;
+	background: none;
+}
+
+.wpicker-admin .wpicker-time {
+	font-size: 12px;
+	color: var(--wpk-ink-soft);
+}
+
+.wpicker-admin .wpicker-empty {
+	padding: 28px 16px;
+	margin: 0;
+	text-align: center;
+	color: var(--wpk-ink-soft);
+}
+
+.wpicker-admin .wpicker-delta {
+	display: inline-block;
+	margin-right: 6px;
+	font-family: var(--wpk-mono);
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.wpicker-admin .is-added { color: var(--wpk-ok); }
+.wpicker-admin .is-modified { color: var(--wpk-warn); }
+.wpicker-admin .is-deleted { color: var(--wpk-bad); }
+
+.wpicker-admin .wpicker-status {
+	display: inline-block;
+	padding: 3px 9px;
+	font-size: 11px;
+	font-weight: 600;
+	white-space: nowrap;
+	border-radius: 999px;
+	background: var(--wpk-canvas);
+	color: var(--wpk-ink-soft);
+}
+
+.wpicker-admin .wpicker-status-applied { background: var(--wpk-ok-soft); color: var(--wpk-ok); }
+.wpicker-admin .wpicker-status-aborted { background: var(--wpk-bad-soft); color: var(--wpk-bad); }
+.wpicker-admin .wpicker-status-restored { background: var(--wpk-accent-soft); color: var(--wpk-accent); }
+.wpicker-admin .wpicker-status-reverted { background: var(--wpk-canvas); color: var(--wpk-ink-soft); text-decoration: line-through; }
+.wpicker-admin .wpicker-status-review { background: var(--wpk-warn-soft); color: var(--wpk-warn); }
+
+/* ---- Pagination, selection --------------------------------------------- */
+
+.wpicker-admin .wpicker-col-check {
+	width: 1%;
+	padding-right: 0;
+}
+
+.wpicker-admin .wpicker-col-check input {
+	margin: 0;
+}
+
+.wpicker-admin .wpicker-bulk {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 14px;
+	margin-bottom: 12px;
+	font-weight: 500;
+	color: var(--wpk-accent);
+	background: var(--wpk-accent-soft);
+	border: 1px solid var(--wpk-accent);
+	border-radius: 8px;
+}
+
+.wpicker-admin .wpicker-pager {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 14px;
+	font-size: 12px;
+	color: var(--wpk-ink-soft);
+	border-top: 1px solid var(--wpk-line);
+	background: var(--wpk-canvas);
+}
+
+.wpicker-admin .wpicker-pager select {
+	min-height: 30px;
+}
+
+.wpicker-admin .wpicker-pager-range {
+	margin: 0 4px 0 8px;
+	font-variant-numeric: tabular-nums;
+}
+
+.wpicker-admin .wpicker-danger-link,
+.wpicker-admin .wpicker-danger-link:hover,
+.wpicker-admin .wpicker-danger-link:focus {
+	color: var(--wpk-bad);
+}
+
+.wpicker-admin .wpicker-pager .wpicker-danger-link {
+	margin-left: auto;
+}
+
+/* ---- Detail dialog ----------------------------------------------------- */
+
+body.wpicker-modal-open {
+	overflow: hidden;
+}
+
+.wpicker-admin .wpicker-modal {
+	position: fixed;
+	inset: 0;
+	z-index: 100100; /* above the WP admin bar */
+}
+
+.wpicker-admin .wpicker-modal-backdrop {
+	position: absolute;
+	inset: 0;
+	background: rgba(15, 18, 22, 0.55);
+}
+
+.wpicker-admin .wpicker-modal-dialog {
+	position: absolute;
+	inset: 24px;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	background: var(--wpk-surface);
+	border-radius: 12px;
+	box-shadow: 0 24px 64px rgba(0, 0, 0, 0.3);
+	outline: 0;
+}
+
+.wpicker-admin .wpicker-modal-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px 16px;
+	padding: 14px 20px;
+	border-bottom: 1px solid var(--wpk-line);
+}
+
+.wpicker-admin .wpicker-modal-title {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 12px;
+	min-width: 0;
+}
+
+.wpicker-admin .wpicker-modal-title h2 {
+	margin: 0;
+	font-family: var(--wpk-mono);
+	font-size: 15px;
+}
+
+.wpicker-admin .wpicker-modal-meta {
+	font-size: 12px;
+	color: var(--wpk-ink-soft);
+}
+
+.wpicker-admin .wpicker-modal-actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-left: auto;
+}
+
+.wpicker-admin .wpicker-modal-close {
+	width: 32px;
+	height: 32px;
+	margin-left: 4px;
+	font-size: 22px;
+	line-height: 1;
+	color: var(--wpk-ink-soft);
+	background: none;
+	border: 0;
+	border-radius: 8px;
+	cursor: pointer;
+}
+
+.wpicker-admin .wpicker-modal-close:hover {
+	color: var(--wpk-ink);
+	background: var(--wpk-canvas);
+}
+
+.wpicker-admin .wpicker-modal-banner {
+	padding: 9px 20px;
+	margin: 0;
+	color: var(--wpk-warn);
+	background: var(--wpk-warn-soft);
+	border-bottom: 1px solid #f0d590;
+}
+
+.wpicker-admin .wpicker-danger {
+	color: var(--wpk-bad);
+	border-color: #e5b4b0;
+}
+
+.wpicker-admin .wpicker-subtabs {
+	display: flex;
+	gap: 2px;
+	padding: 0 14px;
+	border-bottom: 1px solid var(--wpk-line);
+}
+
+.wpicker-admin .wpicker-subtab {
+	padding: 10px 10px 9px;
+	font-weight: 500;
+	color: var(--wpk-ink-soft);
+	background: none;
+	border: 0;
+	border-bottom: 2px solid transparent;
+	cursor: pointer;
+}
+
+.wpicker-admin .wpicker-subtab.is-active {
+	color: var(--wpk-accent);
+	border-bottom-color: var(--wpk-accent);
+}
+
+.wpicker-admin .wpicker-modal-body {
+	display: grid;
+	grid-template-columns: 320px minmax(0, 1fr);
+	flex: 1;
+	min-height: 0;
+}
+
+.wpicker-admin .wpicker-modal-body.is-log {
+	display: block;
+	max-width: 860px;
+	padding: 20px 24px;
+	overflow: auto;
+}
+
+.wpicker-admin .wpicker-modal-body > .wpicker-diff-note {
+	grid-column: 1 / -1;
+}
+
+/* File list */
+
+.wpicker-admin .wpicker-files {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	background: var(--wpk-canvas);
+	border-right: 1px solid var(--wpk-line);
+}
+
+.wpicker-admin .wpicker-files-head {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 12px 14px 10px;
+	border-bottom: 1px solid var(--wpk-line);
+}
+
+.wpicker-admin .wpicker-files-root {
+	font-family: var(--wpk-mono);
+	font-size: 11px;
+	color: var(--wpk-ink-soft);
+	overflow-wrap: anywhere;
+}
+
+.wpicker-admin .wpicker-files-total {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.wpicker-admin .wpicker-file-list {
+	flex: 1;
+	min-height: 0;
+	padding: 6px;
+	overflow: auto;
+}
+
+.wpicker-admin .wpicker-file {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	padding: 7px 8px;
+	text-align: left;
+	color: var(--wpk-ink);
+	background: none;
+	border: 0;
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.wpicker-admin .wpicker-file:hover {
+	background: #eceff3;
+}
+
+.wpicker-admin .wpicker-file.is-active {
+	background: var(--wpk-accent-soft);
+}
+
+.wpicker-admin .wpicker-file-badge {
+	flex: 0 0 18px;
+	height: 18px;
+	font-family: var(--wpk-mono);
+	font-size: 11px;
+	font-weight: 700;
+	line-height: 18px;
+	text-align: center;
+	border-radius: 4px;
+	background: var(--wpk-surface);
+	border: 1px solid var(--wpk-line);
+}
+
+.wpicker-admin .wpicker-file-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.wpicker-admin .wpicker-file-name {
+	font-family: var(--wpk-mono);
+	font-size: 12.5px;
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.wpicker-admin .wpicker-file.is-active .wpicker-file-name {
+	color: var(--wpk-accent);
+}
+
+.wpicker-admin .wpicker-file-dir {
+	font-family: var(--wpk-mono);
+	font-size: 11px;
+	color: var(--wpk-ink-soft);
+	overflow-wrap: anywhere;
+}
+
+.wpicker-admin .wpicker-file-counts {
+	display: inline-flex;
+	flex: 0 0 auto;
+	gap: 6px;
+	font-family: var(--wpk-mono);
+	font-size: 11px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+/* Diff pane */
+
+.wpicker-admin .wpicker-diff-pane {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+}
+
+.wpicker-admin .wpicker-diff-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 14px;
+	padding: 8px 16px;
+	border-bottom: 1px solid var(--wpk-line);
+}
+
+.wpicker-admin .wpicker-diff-path {
+	font-family: var(--wpk-mono);
+	font-size: 13px;
+	overflow-wrap: anywhere;
+}
+
+.wpicker-admin .wpicker-diff-dir {
+	color: var(--wpk-ink-soft);
+}
+
+.wpicker-admin .wpicker-diff-action {
+	padding: 2px 8px;
+	font-size: 11px;
+	font-weight: 600;
+	border-radius: 999px;
+	background: var(--wpk-canvas);
+}
+
+.wpicker-admin .wpicker-diff-action.is-added { background: var(--wpk-ok-soft); }
+.wpicker-admin .wpicker-diff-action.is-modified { background: var(--wpk-warn-soft); }
+.wpicker-admin .wpicker-diff-action.is-deleted { background: var(--wpk-bad-soft); }
+
+.wpicker-admin .wpicker-diff-copy {
+	font-size: 12px;
+}
+
+.wpicker-admin .wpicker-diff-stats {
+	display: flex;
+	gap: 8px;
+	margin-right: auto; /* pushes the view options to the right edge */
+	font-family: var(--wpk-mono);
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.wpicker-admin .wpicker-diff-option {
+	font-size: 12px;
+	color: var(--wpk-ink-soft);
+}
+
+.wpicker-admin .wpicker-seg {
+	display: inline-flex;
+	padding: 2px;
+	background: var(--wpk-canvas);
+	border: 1px solid var(--wpk-line);
+	border-radius: 8px;
+}
+
+.wpicker-admin .wpicker-seg-btn {
+	padding: 4px 12px;
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--wpk-ink-soft);
+	background: none;
+	border: 0;
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.wpicker-admin .wpicker-seg-btn.is-active {
+	color: var(--wpk-ink);
+	background: var(--wpk-surface);
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.wpicker-admin .wpicker-diff {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+}
+
+.wpicker-admin .wpicker-diff-note {
+	padding: 40px 16px;
+	margin: 0;
+	text-align: center;
+	color: var(--wpk-ink-soft);
+}
+
+.wpicker-admin .wpicker-d {
+	width: 100%;
+	border-collapse: collapse;
+	table-layout: fixed;
+	font-family: var(--wpk-mono);
+	font-size: 12.5px;
+	line-height: 20px;
+}
+
+.wpicker-admin .wpicker-d-col-num {
+	width: 52px;
+}
+
+.wpicker-admin .wpicker-d-col-sign {
+	width: 22px;
+}
+
+.wpicker-admin .wpicker-d th {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	padding: 6px 12px;
+	font-family: inherit;
+	font-size: 11px;
+	font-weight: 600;
+	text-align: left;
+	color: var(--wpk-ink-soft);
+	background: var(--wpk-canvas);
+	border-bottom: 1px solid var(--wpk-line);
+}
+
+.wpicker-admin .wpicker-d-split th + th,
+.wpicker-admin .wpicker-d-split td:nth-child(3) {
+	border-left: 1px solid var(--wpk-line);
+}
+
+.wpicker-admin .wpicker-d td {
+	padding: 0 10px;
+	vertical-align: top;
+}
+
+.wpicker-admin .wpicker-d-num {
+	padding: 0 8px;
+	text-align: right;
+	color: #8b94a1;
+	background: #fafbfc;
+	user-select: none;
+	font-variant-numeric: tabular-nums;
+}
+
+.wpicker-admin .wpicker-d-sign {
+	padding: 0;
+	text-align: center;
+	user-select: none;
+}
+
+.wpicker-admin .wpicker-d-code {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	tab-size: 4;
+}
+
+.wpicker-admin .wpicker-d .is-add { background: #e6f6ec; }
+.wpicker-admin .wpicker-d .is-del { background: #fdecea; }
+.wpicker-admin .wpicker-d .wpicker-d-num.is-add { background: #cfeedb; color: var(--wpk-ok); }
+.wpicker-admin .wpicker-d .wpicker-d-num.is-del { background: #f9d5d1; color: var(--wpk-bad); }
+.wpicker-admin .wpicker-d .wpicker-d-sign.is-add { color: var(--wpk-ok); }
+.wpicker-admin .wpicker-d .wpicker-d-sign.is-del { color: var(--wpk-bad); }
+.wpicker-admin .wpicker-d .is-void { background: #f3f4f6; }
+.wpicker-admin .wpicker-d-mark-add { background: #a6e3bf; border-radius: 2px; }
+.wpicker-admin .wpicker-d-mark-del { background: #f5b5ae; border-radius: 2px; }
+
+.wpicker-admin .wpicker-d-gap td {
+	padding: 4px 12px;
+	font-size: 11px;
+	text-align: center;
+	color: var(--wpk-ink-soft);
+	background: var(--wpk-accent-soft);
+	border-top: 1px solid var(--wpk-line);
+	border-bottom: 1px solid var(--wpk-line);
+	user-select: none;
+}
+
+.wpicker-admin .wpicker-d-caption td {
+	padding: 6px 12px;
+	font-size: 11px;
+	color: var(--wpk-ink-soft);
+	border-bottom: 1px solid var(--wpk-line);
+}
+
+.wpicker-admin .wpicker-log-heading {
+	margin: 22px 0 0;
+	font-size: 13px;
+}
+
+.wpicker-admin .wpicker-log {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.wpicker-admin .wpicker-log li {
+	position: relative;
+	padding: 0 0 14px 18px;
+	margin: 0;
+	border-left: 2px solid var(--wpk-line);
+}
+
+.wpicker-admin .wpicker-log li:last-child {
+	padding-bottom: 0;
+}
+
+.wpicker-admin .wpicker-log li::before {
+	content: "";
+	position: absolute;
+	top: 4px;
+	left: -6px;
+	width: 10px;
+	height: 10px;
+	background: var(--wpk-surface);
+	border: 2px solid var(--wpk-accent);
+	border-radius: 50%;
+}
+
+.wpicker-admin .wpicker-log-event {
+	font-weight: 600;
+	text-transform: capitalize;
+}
+
+.wpicker-admin .wpicker-log-time {
+	margin-left: 6px;
+	font-size: 12px;
+	color: var(--wpk-ink-soft);
+}
+
+.wpicker-admin .wpicker-log-msg {
+	margin: 2px 0 0;
+	color: var(--wpk-ink-soft);
+	overflow-wrap: anywhere;
+}
+
+.wpicker-admin .wpicker-error-pre {
+	padding: 12px;
+	margin: 12px 0 0;
+	overflow: auto;
+	font-family: var(--wpk-mono);
+	font-size: 12px;
+	color: #ffd9d6;
+	background: #1d2327;
+	border-radius: 8px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+/* ---- Conflict resolution ----------------------------------------------- */
+
+.wpicker-admin .wpicker-modal-body.is-conflict {
+	display: block;
+	padding: 20px 24px;
+	overflow: auto;
+}
+
+.wpicker-admin .wpicker-conflict h3 {
+	margin: 0 0 4px;
+	font-size: 15px;
+}
+
+.wpicker-admin .wpicker-conflict-list {
+	margin: 14px 0;
+	border: 1px solid var(--wpk-line);
+	border-radius: 8px;
+}
+
+.wpicker-admin .wpicker-conflict-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 14px;
+	padding: 10px 14px;
+	border-bottom: 1px solid var(--wpk-line);
+}
+
+.wpicker-admin .wpicker-conflict-row:last-child {
+	border-bottom: 0;
+}
+
+.wpicker-admin .wpicker-conflict-path {
+	margin-right: auto;
+	padding: 0;
+	font-family: var(--wpk-mono);
+	font-size: 13px;
+	font-weight: 600;
+	background: none;
+	overflow-wrap: anywhere;
+}
+
+.wpicker-admin .wpicker-conflict-foot {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-bottom: 16px;
+}
+
+.wpicker-admin .wpicker-conflict-diff {
+	flex: none;
+	border: 1px solid var(--wpk-line);
+	border-radius: 8px;
+}
+
+.wpicker-admin .wpicker-diff-caption {
+	padding: 8px 12px;
+	margin: 0;
+	font-size: 12px;
+	color: var(--wpk-ink-soft);
+	background: var(--wpk-canvas);
+	border-bottom: 1px solid var(--wpk-line);
+}
+
+/* ---- Toast ------------------------------------------------------------- */
+
+.wpicker-admin .wpicker-toast {
+	position: fixed;
+	right: 24px;
+	bottom: 24px;
+	z-index: 100000;
+	max-width: 420px;
+	padding: 12px 16px;
+	color: #fff;
+	background: var(--wpk-ink);
+	border-radius: 8px;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.wpicker-admin .wpicker-toast.is-error {
+	background: var(--wpk-bad);
+}
+
+/* ---- Backups ----------------------------------------------------------- */
+
+.wpicker-admin .wpicker-parts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 20px;
+	margin: 14px 0;
+}
+
+.wpicker-admin .wpicker-progress {
+	margin-top: 4px;
+}
+
+.wpicker-admin .wpicker-progress-track {
+	height: 8px;
+	overflow: hidden;
+	background: var(--wpk-canvas);
+	border: 1px solid var(--wpk-line);
+	border-radius: 999px;
+}
+
+.wpicker-admin .wpicker-progress-bar {
+	width: 0;
+	height: 100%;
+	background: var(--wpk-accent);
+	transition: width 0.3s ease;
+}
+
+.wpicker-admin .wpicker-hint {
+	margin-top: 12px;
+}
+
+.wpicker-admin .wpicker-table td .wpicker-time {
+	display: block;
+}
+
+/* ---- Restore ----------------------------------------------------------- */
+
+.wpicker-admin .wpicker-card-row {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+	gap: 16px;
+	max-width: 1100px;
+}
+
+.wpicker-admin .wpicker-card-row .wpicker-card {
+	max-width: none;
+}
+
+.wpicker-admin .wpicker-restore-result.is-done {
+	border-color: #b6dfc6;
+	background: var(--wpk-ok-soft);
+}
+
+.wpicker-admin .wpicker-restore-result.is-failed {
+	border-color: #e5b4b0;
+	background: var(--wpk-bad-soft);
+}
+
+.wpicker-admin .wpicker-modal-dialog.is-narrow {
+	top: 6vh;
+	right: auto;
+	bottom: auto;
+	left: 50%;
+	width: min(640px, calc(100vw - 32px));
+	max-height: 88vh;
+	transform: translateX(-50%);
+}
+
+.wpicker-admin .wpicker-modal-dialog.is-narrow .wpicker-modal-title h2 {
+	font-family: inherit;
+	font-size: 16px;
+}
+
+.wpicker-admin .wpicker-restore-body {
+	padding: 16px 20px;
+	overflow: auto;
+}
+
+.wpicker-admin .wpicker-restore-body h3 {
+	margin: 18px 0 8px;
+	font-size: 13px;
+}
+
+.wpicker-admin .wpicker-facts {
+	display: grid;
+	grid-template-columns: 96px minmax(0, 1fr);
+	gap: 6px 12px;
+	margin: 0;
+}
+
+.wpicker-admin .wpicker-facts dt {
+	color: var(--wpk-ink-soft);
+}
+
+.wpicker-admin .wpicker-facts dd {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+.wpicker-admin .wpicker-restore-parts {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.wpicker-admin .wpicker-restore-warn {
+	padding: 12px 14px 12px 30px;
+	margin: 0 0 14px;
+	list-style: disc;
+	background: var(--wpk-warn-soft);
+	border: 1px solid #f0d590;
+	border-radius: 8px;
+}
+
+.wpicker-admin .wpicker-restore-warn li {
+	margin: 0 0 6px;
+}
+
+.wpicker-admin .wpicker-restore-warn li:last-child {
+	margin-bottom: 0;
+}
+
+.wpicker-admin .wpicker-restore-check {
+	display: block;
+	margin-top: 8px;
+}
+
+.wpicker-admin .wpicker-restore-foot {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	padding: 12px 20px;
+	border-top: 1px solid var(--wpk-line);
+	background: var(--wpk-canvas);
+}
+
+.wpicker-admin .wpicker-restore-foot:empty {
+	display: none;
+}
+
+.wpicker-admin .wpicker-restore-steps {
+	margin: 0 0 14px;
+	padding: 0;
+	list-style: none;
+}
+
+.wpicker-admin .wpicker-restore-steps li {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 0;
+	margin: 0;
+	color: var(--wpk-ink-soft);
+	border-bottom: 1px solid var(--wpk-line);
+}
+
+.wpicker-admin .wpicker-restore-steps li::before {
+	content: "";
+	flex: 0 0 10px;
+	height: 10px;
+	border: 2px solid #c3c8d0;
+	border-radius: 50%;
+}
+
+.wpicker-admin .wpicker-restore-steps li.is-active {
+	color: var(--wpk-ink);
+	font-weight: 600;
+}
+
+.wpicker-admin .wpicker-restore-steps li.is-active::before {
+	border-color: var(--wpk-accent);
+	border-top-color: transparent;
+	animation: wpicker-spin 0.8s linear infinite;
+}
+
+.wpicker-admin .wpicker-restore-steps li.is-done {
+	color: var(--wpk-ink);
+}
+
+.wpicker-admin .wpicker-restore-steps li.is-done::before {
+	background: var(--wpk-ok);
+	border-color: var(--wpk-ok);
+}
+
+.wpicker-admin .wpicker-restore-steps li.is-skipped {
+	text-decoration: line-through;
+	opacity: 0.6;
+}
+
+.wpicker-admin .wpicker-step-note {
+	margin-left: auto;
+	font-size: 12px;
+	font-weight: 400;
+	color: var(--wpk-ink-soft);
+	font-variant-numeric: tabular-nums;
+}
+
+.wpicker-admin .wpicker-restore-message.is-ok {
+	color: var(--wpk-ok);
+	font-weight: 600;
+}
+
+.wpicker-admin .wpicker-restore-message.is-error {
+	color: var(--wpk-bad);
+	font-weight: 600;
+}
+
+@keyframes wpicker-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.wpicker-admin .wpicker-restore-steps li.is-active::before {
+		animation: none;
+		border-top-color: var(--wpk-accent);
+	}
+}
+
+/* ---- Settings ---------------------------------------------------------- */
+
+.wpicker-admin .wpicker-options {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	gap: 12px;
+	margin-top: 12px;
+}
+
+.wpicker-admin .wpicker-option {
+	display: flex;
+	gap: 10px;
+	padding: 14px;
+	border: 1px solid var(--wpk-line);
+	border-radius: 8px;
+	cursor: pointer;
+}
+
+.wpicker-admin .wpicker-option:has(input:checked) {
+	background: var(--wpk-accent-soft);
+	border-color: var(--wpk-accent);
+}
+
+.wpicker-admin .wpicker-option input {
+	margin-top: 3px;
+}
+
+.wpicker-admin .wpicker-option-body,
+.wpicker-admin .wpicker-check > span {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.wpicker-admin .wpicker-option-body span {
+	color: var(--wpk-ink-soft);
+}
+
+.wpicker-admin .wpicker-check {
+	display: flex;
+	gap: 10px;
+	padding: 10px 0;
+}
+
+.wpicker-admin .wpicker-check input {
+	margin-top: 3px;
+}
+
+.wpicker-admin .wpicker-field {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 12px;
+	margin: 12px 0 0;
+}
+
+.wpicker-admin .wpicker-field label {
+	flex: 0 0 220px;
+	font-weight: 600;
+}
+
+.wpicker-admin .wpicker-field input[type="number"] {
+	width: 96px;
+}
+
+.wpicker-admin .wpicker-field .wpicker-muted {
+	flex-basis: 100%;
+}
+
+.wpicker-admin .wpicker-subhead {
+	margin: 18px 0 8px;
+	font-size: 13px;
+}
+
+.wpicker-admin .wpicker-audit {
+	border: 1px solid var(--wpk-line);
+	border-radius: 8px;
+	font-size: 12px;
+}
+
+.wpicker-admin .wpicker-audit code {
+	background: none;
+	font-size: 12px;
+}
+
+/* ---- Pairing PIN ------------------------------------------------------- */
+
 .wpicker-admin .wpicker-pin-card {
 	max-width: 520px;
-	padding: 14px 20px;
-	margin: 16px 0;
 }
 
 .wpicker-admin .wpicker-pin-display {
 	margin-top: 12px;
 	padding: 16px;
-	background: #f6f7f7;
-	border: 1px dashed #c3c4c7;
-	border-radius: 4px;
 	text-align: center;
+	background: var(--wpk-canvas);
+	border: 1px dashed #c3c8d0;
+	border-radius: 8px;
 }
 
 .wpicker-admin .wpicker-pin-code {
-	font-family: Menlo, Consolas, monospace;
+	font-family: var(--wpk-mono);
 	font-size: 2.4em;
 	font-weight: 700;
 	letter-spacing: 0.35em;
-	color: #1d2327;
-	padding-left: 0.35em; /* compensate letter-spacing on last char */
+}
+
+.wpicker-admin .wpicker-pin-actions {
+	display: flex;
+	gap: 8px;
+	margin: 12px 0 8px;
+}
+
+.wpicker-admin .wpicker-pin-message {
+	min-height: 1.5em;
+	margin: 10px 0 0;
+	color: var(--wpk-ink-soft);
 }
 
 .wpicker-admin .wpicker-pin-expires {
 	margin-top: 6px;
-	font-size: 0.85em;
-	color: #646970;
+	font-size: 12px;
+	color: var(--wpk-ink-soft);
 }
 
-.wpicker-admin .wpicker-status {
-	display: inline-block;
-	padding: 2px 8px;
-	border-radius: 10px;
-	font-size: 0.8em;
-	font-weight: 600;
-	text-transform: uppercase;
-	letter-spacing: 0.04em;
-}
+@media (max-width: 900px) {
+	.wpicker-admin .wpicker-modal-dialog {
+		inset: 8px;
+	}
 
-.wpicker-admin .wpicker-status-applied  { background: #e6f4ea; color: #1a7d37; }
-.wpicker-admin .wpicker-status-aborted  { background: #fbeaea; color: #b32d2e; }
-.wpicker-admin .wpicker-status-restored { background: #e9effb; color: #1d4fc4; }
-.wpicker-admin .wpicker-status-pending  { background: #f0f0f1; color: #50575e; }
+	.wpicker-admin .wpicker-modal-body {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto minmax(0, 1fr);
+	}
 
-.wpicker-admin .wpicker-error-pre {
-	background: #1d2327;
-	color: #ffbcbc;
-	padding: 12px;
-	overflow: auto;
-	font-size: 0.82em;
-	border-radius: 3px;
+	.wpicker-admin .wpicker-files {
+		max-height: 180px;
+		border-right: 0;
+		border-bottom: 1px solid var(--wpk-line);
+	}
 }

@@ -85,6 +85,35 @@ You are working on a WordPress child theme managed by WPicker. Follow these rule
    - run `+"`wpicker history`"+` to see manifests,
    - run `+"`wpicker rollback <manifest-id>`"+` to restore the last good state,
    - fix the code, then push again.
+5. Other people (and agents) push to the same site. If `+"`wpicker theme status`"+`
+   lists conflicts, or a push is refused with "Drift detected":
+   - run `+"`wpicker theme pull --all`"+` — files changed on both sides are merged
+     line by line;
+   - a file reported as "conflict(s) marked" contains blocks like
+       <<<<<<< yours
+       ...your lines...
+       =======
+       ...their lines...
+       >>>>>>> site (device, time)
+     Rewrite each block into the single correct version — usually keeping the
+     intent of BOTH sides — and delete the three marker lines;
+   - push again. A push is refused while any marker remains.
+
+## Diagnosing a problem on the site
+Look before you change anything. These commands only read; they need
+"Diagnostic access" enabled in WP-Admin → WPicker → Settings.
+1. `+"`wpicker logs --since 1h`"+` — the site's PHP and WordPress errors, grouped,
+   with file and line. Add `+"`--level warning`"+`, `+"`--grep <text>`"+`, `+"`--trace`"+`.
+2. If the logs say little: `+"`wpicker debug on`"+`, reproduce the problem (load the
+   page), `+"`wpicker logs --since 5m`"+`, then `+"`wpicker debug off`"+`.
+3. Read the code the error points at — any file under wp-content, not just the theme:
+   `+"`wpicker files cat plugins/x/file.php --lines 100-140`"+`,
+   `+"`wpicker files grep \"function_name\" plugins`"+`, `+"`wpicker files ls plugins/x`"+`.
+4. Check the data: `+"`wpicker db tables`"+`, then
+   `+"`wpicker db query \"SELECT ... LIMIT 20\"`"+` (read-only; credentials are not readable,
+   so do not go looking for them).
+5. Fix it in the child theme locally and `+"`wpicker theme push`"+`; then check the logs again.
+Add `+"`--json`"+` to any of these for structured output.
 
 ## Guardrails (HARD)
 - You may ONLY modify files inside the active child theme.
@@ -98,12 +127,16 @@ You are working on a WordPress child theme managed by WPicker. Follow these rule
 ## Useful commands
 - `+"`wpicker context`"+` — site/plugins/theme versions + theme_mods (ground yourself here first).
 - `+"`wpicker theme files`"+` — list the child-theme files on the site.
+- `+"`wpicker theme status`"+` — what to push, what to pull, conflicts, and who pushed them.
+- `+"`wpicker theme diff [path]`"+` — line diff between the local copy and the site.
 - `+"`wpicker history <id>`"+` — inspect one manifest (file list + error log).
 - `+"`wpicker device list`"+` — show paired devices.
 
 ## Files
 - `+"`.wpicker/last-pull.json`"+` — hash manifest of the last pull (do not hand-edit).
 - `+"`.wpicker/last-error.json`"+` — the last push error, when a push failed.
+- `+"`.wpicker/base/`"+` — each file as of the last sync (the merge ancestor; do not edit).
+- `+"`.wpicker/merge-backup/`"+` — your version of a file from just before it was merged.
 - `+"`.wpicker/context.json`"+` — cached site context.
 `, siteHint)) + "\n"
 }

@@ -38,7 +38,8 @@ var rootCmd = &cobra.Command{
 Authenticate with ` + "`wpicker login`" + `, then sync your child theme, inspect deployment
 history, and roll back instantly. Every push is lint-checked and snapshotted,
 so an AI agent can self-heal after a failed deploy.`,
-	SilenceUsage: true,
+	SilenceUsage:  true,
+	SilenceErrors: true, // main prints the error once
 }
 
 // Execute runs the root command.

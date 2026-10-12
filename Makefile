@@ -66,8 +66,15 @@ test-php: ## Run PHPUnit (inside wp-env for DB-dependent tests)
 # ------------------------------------------------------------------
 # Composite targets
 # ------------------------------------------------------------------
-.PHONY: test lint
+.PHONY: test lint sim mirror
 test: test-go lint-php ## Run all fast tests
+
+sim: build-cli ## End-to-end simulation against two Local sites (see scripts/sim.sh)
+	./scripts/sim.sh
+
+mirror: build-cli ## Site-to-site backup + restore test; OVERWRITES the target site (see scripts/mirror/run.sh)
+	./scripts/mirror/run.sh
+	MIRROR_METHOD=cli ./scripts/mirror/run.sh
 
 lint: vet-go lint-php ## Run all linters
 

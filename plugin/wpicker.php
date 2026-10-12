@@ -61,6 +61,13 @@ if ( is_readable( WPICKER_DIR . 'vendor/autoload.php' ) ) {
 	require_once WPICKER_DIR . 'vendor/autoload.php';
 }
 
+/*
+ * "WordPress debug logging" (WPicker → Settings): switch full error
+ * reporting on as early as this plugin loads, so errors raised while the
+ * rest of WordPress and the other plugins boot are captured too.
+ */
+\WPicker\Inspect\Logs::debug_boot();
+
 /**
  * Activation: ensure required storage exists, default options seeded.
  * No DB writes from CLI ever, but plugin-owned storage is fine.
@@ -74,7 +81,7 @@ function wpicker_activate(): void {
 		$defaults,
 		array(
 			'vault_keep'      => 30,     // snapshots to retain
-			'pin_ttl'         => 600,    // seconds
+			'pin_ttl'         => 120,    // seconds
 			'pin_length'      => 6,
 			'lint_enabled'    => 1,
 		)

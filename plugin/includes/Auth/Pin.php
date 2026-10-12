@@ -4,7 +4,7 @@
  *
  * Flow:
  *   1. Admin (or any user with edit_themes) calls /device/challenge.
- *   2. A 6-digit PIN is generated, stored as a transient (default 10 min, 1 use),
+ *   2. A 6-digit PIN is generated, stored as a transient (default 2 min, 1 use),
  *      keyed by user id. It is surfaced in the admin dashboard for the user to
  *      read and paste into the CLI.
  *   3. The CLI submits the PIN via /device/register; the transient is verified
@@ -32,7 +32,7 @@ final class Pin {
 	/**
 	 * Default PIN TTL in seconds.
 	 */
-	public const DEFAULT_TTL = 10;
+	public const DEFAULT_TTL = 120;
 
 	/**
 	 * Default PIN length (digits).

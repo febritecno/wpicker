@@ -104,4 +104,14 @@ abstract class Base {
 			$status
 		);
 	}
+
+	/**
+	 * Turn a service-layer error (see Sync\Deployer::error()) into a response.
+	 *
+	 * @param array{ code: string, message: string, status: int, extra: array<string,mixed> } $error Error.
+	 * @return \WP_REST_Response
+	 */
+	protected function fail_from( array $error ): \WP_REST_Response {
+		return $this->fail( $error['code'], $error['message'], (int) $error['status'], (array) $error['extra'] );
+	}
 }

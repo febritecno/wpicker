@@ -57,6 +57,31 @@ final class Device extends Base {
 	private $pins;
 
 	/**
+	 * True when the caller proved identity with username + password in the
+	 * request body (CLI pairing), rather than an existing session.
+	 *
+	 * @var bool
+	 */
+	private $via_credentials = false;
+
+	/**
+	 * Authorization decisions already made, keyed by request object id.
+	 *
+	 * @var array<int,bool|\WP_Error>
+	 */
+	private $decisions = array();
+
+	/**
+	 * Failed pairing attempts allowed per username + IP before lockout.
+	 */
+	private const MAX_ATTEMPTS = 5;
+
+	/**
+	 * Lockout window in seconds.
+	 */
+	private const LOCKOUT_TTL = 900;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param Capability $caps Capability helper.
@@ -80,14 +105,35 @@ final class Device extends Base {
 				'permission_callback' => array( $this, 'permission_challenge' ),
 			),
 			array(
+				// CLI pairing: username + password travel in the JSON body.
+				'path'                => '/device/challenge',
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'challenge' ),
+				'permission_callback' => array( $this, 'permission_challenge' ),
+			),
+			array(
 				'path'                => '/device/register',
 				'methods'             => 'POST',
-				'callback'            => array( $this, 'register' ),
+				'callback'            => array( $this, 'register_device' ),
 				'permission_callback' => array( $this, 'permission_register' ),
 				'args'                => array(
 					'pin'         => array( 'type' => 'string', 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ),
 					'device_name' => array( 'type' => 'string', 'required' => false, 'default' => 'WPicker CLI', 'sanitize_callback' => 'sanitize_text_field' ),
 				),
+			),
+			array(
+				// WP-Admin: is a pairing open right now, and has a device joined?
+				'path'                => '/device/pairing',
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'pairing_status' ),
+				'permission_callback' => array( $this, 'permission_session' ),
+			),
+			array(
+				// WP-Admin: stop the open pairing by discarding its PIN.
+				'path'                => '/device/pairing',
+				'methods'             => 'DELETE',
+				'callback'            => array( $this, 'stop_pairing' ),
+				'permission_callback' => array( $this, 'permission_session' ),
 			),
 			array(
 				'path'                => '/device',
@@ -108,22 +154,131 @@ final class Device extends Base {
 	}
 
 	/**
-	 * Permission for issuing a challenge (must be the user himself, logged in).
+	 * Permission for issuing a challenge.
 	 *
+	 * @param WP_REST_Request $request Request.
 	 * @return bool|\WP_Error
 	 */
-	public function permission_challenge() {
-		return $this->caps->rest_challenge();
+	public function permission_challenge( WP_REST_Request $request ) {
+		return $this->authorize( $request );
 	}
 
 	/**
-	 * Permission for registering a device: caller is the user (Basic auth),
-	 * and must be capable of edit_themes. The PIN is checked separately.
+	 * Permission for registering a device. The PIN is checked separately.
 	 *
+	 * @param WP_REST_Request $request Request.
 	 * @return bool|\WP_Error
 	 */
-	public function permission_register() {
-		return $this->caps->rest_challenge();
+	public function permission_register( WP_REST_Request $request ) {
+		return $this->authorize( $request );
+	}
+
+	/**
+	 * Identify the caller for pairing.
+	 *
+	 * Two ways in:
+	 *   - an existing session (WP-Admin cookie + nonce, or an Application
+	 *     Password) that can edit themes;
+	 *   - `username` + `password` in the request body, verified here. Core's
+	 *     REST Basic auth only understands Application Passwords, which a
+	 *     first-time user does not have yet — pairing is how they get one.
+	 *
+	 * The password path is refused over plain HTTP outside local environments
+	 * and is rate limited per username + IP.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return bool|\WP_Error
+	 */
+	private function authorize( WP_REST_Request $request ) {
+		// Core calls permission callbacks more than once per request (dispatch,
+		// then again for every handler on the route to build the Allow
+		// header). Decide once, or one bad password counts as several.
+		$key = spl_object_id( $request );
+		if ( ! array_key_exists( $key, $this->decisions ) ) {
+			$this->decisions[ $key ] = $this->decide( $request );
+		}
+		return $this->decisions[ $key ];
+	}
+
+	/**
+	 * Uncached body of authorize().
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return bool|\WP_Error
+	 */
+	private function decide( WP_REST_Request $request ) {
+		if ( $this->caps->can( Capability::SYNC_FILES ) ) {
+			return true;
+		}
+
+		$username = trim( (string) $request->get_param( 'username' ) );
+		$password = (string) $request->get_param( 'password' );
+		if ( '' === $username || '' === $password ) {
+			return $this->caps->rest_challenge();
+		}
+
+		if ( ! is_ssl() && 'local' !== wp_get_environment_type() ) {
+			return new \WP_Error(
+				'wpicker_insecure_transport',
+				__( 'Pairing with a password requires HTTPS.', 'wpicker' ),
+				array( 'status' => 403 )
+			);
+		}
+
+		if ( $this->is_locked( $username ) ) {
+			return new \WP_Error(
+				'wpicker_locked',
+				__( 'Too many failed attempts. Try again in 15 minutes.', 'wpicker' ),
+				array( 'status' => 429 )
+			);
+		}
+
+		$user = wp_authenticate( $username, $password );
+		if ( is_wp_error( $user ) || ! user_can( $user, Capability::SYNC_FILES ) ) {
+			// One answer for "wrong password" and "not allowed": no user enumeration.
+			$this->record_failure( $username );
+			return new \WP_Error(
+				'wpicker_auth_failed',
+				__( 'Invalid credentials, or this user cannot edit themes.', 'wpicker' ),
+				array( 'status' => 401 )
+			);
+		}
+
+		wp_set_current_user( $user->ID );
+		$this->via_credentials = true;
+		return true;
+	}
+
+	/**
+	 * Transient key for the attempt counter of a username from this IP.
+	 *
+	 * @param string $username Submitted username.
+	 * @return string
+	 */
+	private function attempts_key( string $username ): string {
+		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : '';
+		return 'wpicker_fail_' . md5( strtolower( $username ) . '|' . $ip );
+	}
+
+	/**
+	 * Has this username + IP used up its attempts?
+	 *
+	 * @param string $username Submitted username.
+	 * @return bool
+	 */
+	private function is_locked( string $username ): bool {
+		return (int) get_transient( $this->attempts_key( $username ) ) >= self::MAX_ATTEMPTS;
+	}
+
+	/**
+	 * Count a failed password or PIN attempt.
+	 *
+	 * @param string $username Submitted username.
+	 * @return void
+	 */
+	private function record_failure( string $username ): void {
+		$key = $this->attempts_key( $username );
+		set_transient( $key, (int) get_transient( $key ) + 1, self::LOCKOUT_TTL );
 	}
 
 	/**
@@ -136,7 +291,7 @@ final class Device extends Base {
 	}
 
 	/**
-	 * GET /device/challenge — issue a PIN for the current user.
+	 * GET|POST /device/challenge — issue a PIN for the current user.
 	 *
 	 * @return WP_REST_Response
 	 */
@@ -144,18 +299,22 @@ final class Device extends Base {
 		$user_id = get_current_user_id();
 		$issued  = $this->pins->issue( $user_id );
 
-		// Surface the PIN in the response ONLY because the caller is the
-		// authenticated user themselves (admin). It is also rendered in admin.
-		return $this->ok(
-			array(
-				'user_id'        => $user_id,
-				'pin'            => $issued['pin'],
-				'expires_at_gmt' => $issued['expires_at_gmt'],
-				'ttl'            => $issued['ttl'],
-				'plugin_version' => WPICKER_VERSION,
-				'hint'           => 'Enter this PIN into the CLI prompt, or read it in WP-Admin → WPicker → Devices.',
-			)
+		$data = array(
+			'user_id'        => $user_id,
+			'expires_at_gmt' => $issued['expires_at_gmt'],
+			'ttl'            => $issued['ttl'],
+			'plugin_version' => WPICKER_VERSION,
+			'hint'           => 'Read the PIN in WP-Admin → WPicker → Devices and enter it into the CLI prompt.',
 		);
+
+		// The PIN is the second factor: it proves the caller can also see
+		// WP-Admin. Only an existing session gets it back in the response;
+		// a caller who merely knows the password has to go and read it.
+		if ( ! $this->via_credentials ) {
+			$data['pin'] = $issued['pin'];
+		}
+
+		return $this->ok( $data );
 	}
 
 	/**
@@ -164,12 +323,15 @@ final class Device extends Base {
 	 * @param WP_REST_Request $request Request.
 	 * @return WP_REST_Response
 	 */
-	public function register( WP_REST_Request $request ): WP_REST_Response {
+	public function register_device( WP_REST_Request $request ): WP_REST_Response {
 		$user_id = get_current_user_id();
 		$pin     = (string) $request->get_param( 'pin' );
 		$name    = (string) $request->get_param( 'device_name' );
 
 		if ( ! $this->pins->verify( $user_id, $pin ) ) {
+			if ( $this->via_credentials ) {
+				$this->record_failure( trim( (string) $request->get_param( 'username' ) ) );
+			}
 			return $this->fail( 'wpicker_pin_invalid', 'PIN is invalid, expired, or already used.', 401 );
 		}
 
@@ -178,14 +340,17 @@ final class Device extends Base {
 		}
 
 		$device_name = '' !== $name ? $name : 'WPicker CLI ' . gmdate( 'Y-m-d H:i' );
-		list( $new_item, $raw_password ) = \WP_Application_Passwords::create_new_application_password(
+		$created = \WP_Application_Passwords::create_new_application_password(
 			$user_id,
 			array( 'name' => $device_name )
 		);
 
-		if ( is_wp_error( $new_item ) ) {
-			return $this->fail( 'wpicker_app_password_failed', $new_item->get_error_message(), 500 );
+		if ( is_wp_error( $created ) ) {
+			return $this->fail( 'wpicker_app_password_failed', $created->get_error_message(), 500 );
 		}
+
+		// Core returns array( $raw_password, $item ).
+		list( $raw_password, $new_item ) = $created;
 
 		// Track our own metadata for display.
 		$record = array(
@@ -207,6 +372,57 @@ final class Device extends Base {
 			),
 			201
 		);
+	}
+
+	/**
+	 * Permission for the pairing controls in WP-Admin: an existing session
+	 * that may pair devices. Username + password in the body does not count —
+	 * that caller must not be able to read the PIN it is supposed to be shown.
+	 *
+	 * @return bool|\WP_Error
+	 */
+	public function permission_session() {
+		return $this->caps->rest_challenge();
+	}
+
+	/**
+	 * GET /device/pairing — the current user's open pairing, if any.
+	 *
+	 * Lets the Devices screen show a PIN the CLI just asked for, count it
+	 * down, and notice when a device used it.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function pairing_status(): WP_REST_Response {
+		$user_id = get_current_user_id();
+		$current = $this->pins->current( $user_id );
+		$mine    = 0;
+		foreach ( $this->all_devices() as $device ) {
+			if ( (int) ( $device['user_id'] ?? 0 ) === $user_id ) {
+				++$mine;
+			}
+		}
+
+		$data = array(
+			'active'       => null !== $current,
+			'device_count' => $mine,
+		);
+		if ( null !== $current ) {
+			$data['pin']        = $current['pin'];
+			$data['expires_in'] = max( 0, strtotime( $current['expires_at_gmt'] ) - time() );
+		}
+		return $this->ok( $data );
+	}
+
+	/**
+	 * DELETE /device/pairing — discard the current user's PIN, so a pairing
+	 * that was started (here or by the CLI) can no longer be completed.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function stop_pairing(): WP_REST_Response {
+		$this->pins->clear( get_current_user_id() );
+		return $this->ok( array( 'active' => false ) );
 	}
 
 	/**

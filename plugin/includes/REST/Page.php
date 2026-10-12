@@ -46,6 +46,15 @@ final class Page extends Base {
 	}
 
 	/**
+	 * Permission callback: page writes require manage_options.
+	 *
+	 * @return bool|\WP_Error
+	 */
+	public function check_permission() {
+		return wpicker()->caps->rest_manage();
+	}
+
+	/**
 	 * POST /page handler.
 	 *
 	 * @param WP_REST_Request $request Request object.
@@ -57,7 +66,7 @@ final class Page extends Base {
 		$payload = $request->get_param( 'payload' );
 
 		if ( empty( $title ) || empty( $builder ) || empty( $payload ) ) {
-			return $this->error( 'missing_args', 'Missing required arguments: title, builder, payload.', 400 );
+			return $this->fail( 'missing_args', 'Missing required arguments: title, builder, payload.', 400 );
 		}
 
 		$post_data = array(
@@ -75,13 +84,13 @@ final class Page extends Base {
 		} elseif ( 'elementor' === $builder ) {
 			$post_data['post_content'] = '<!-- Elementor Managed Page -->'; // Elementor data lives in meta.
 		} else {
-			return $this->error( 'invalid_builder', 'Unsupported builder type. Must be divi, elementor, or gutenberg.', 400 );
+			return $this->fail( 'invalid_builder', 'Unsupported builder type. Must be divi, elementor, or gutenberg.', 400 );
 		}
 
 		$post_id = wp_insert_post( $post_data, true );
 
 		if ( is_wp_error( $post_id ) ) {
-			return $this->error( 'post_creation_failed', $post_id->get_error_message(), 500 );
+			return $this->fail( 'post_creation_failed', $post_id->get_error_message(), 500 );
 		}
 
 		// Inject Builder-specific post meta.
@@ -98,7 +107,7 @@ final class Page extends Base {
 				update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
 				update_post_meta( $post_id, '_elementor_template_type', 'wp-page' );
 			} else {
-				return $this->error( 'invalid_json', 'Elementor payload must be valid JSON.', 400 );
+				return $this->fail( 'invalid_json', 'Elementor payload must be valid JSON.', 400 );
 			}
 		}
 
@@ -123,12 +132,12 @@ final class Page extends Base {
 		$payload = $request->get_param( 'payload' );
 
 		if ( empty( $builder ) || empty( $payload ) ) {
-			return $this->error( 'missing_args', 'Missing required arguments: builder, payload.', 400 );
+			return $this->fail( 'missing_args', 'Missing required arguments: builder, payload.', 400 );
 		}
 
 		$post = get_post( $post_id );
 		if ( ! $post || 'page' !== $post->post_type ) {
-			return $this->error( 'invalid_post', 'Page not found.', 404 );
+			return $this->fail( 'invalid_post', 'Page not found.', 404 );
 		}
 
 		$post_data = array(
@@ -147,13 +156,13 @@ final class Page extends Base {
 		} elseif ( 'elementor' === $builder ) {
 			// Do not overwrite existing post_content if updating Elementor unless necessary.
 		} else {
-			return $this->error( 'invalid_builder', 'Unsupported builder type.', 400 );
+			return $this->fail( 'invalid_builder', 'Unsupported builder type.', 400 );
 		}
 
 		$updated_id = wp_update_post( $post_data, true );
 
 		if ( is_wp_error( $updated_id ) ) {
-			return $this->error( 'post_update_failed', $updated_id->get_error_message(), 500 );
+			return $this->fail( 'post_update_failed', $updated_id->get_error_message(), 500 );
 		}
 
 		// Inject Builder-specific post meta.
@@ -166,7 +175,7 @@ final class Page extends Base {
 				update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
 				update_post_meta( $post_id, '_elementor_template_type', 'wp-page' );
 			} else {
-				return $this->error( 'invalid_json', 'Elementor payload must be valid JSON.', 400 );
+				return $this->fail( 'invalid_json', 'Elementor payload must be valid JSON.', 400 );
 			}
 		}
 

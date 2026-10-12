@@ -2,8 +2,10 @@ package client
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/url"
 )
 
 // --- Context ---------------------------------------------------------------
@@ -53,7 +55,9 @@ func (c *Client) GetContext(ctx context.Context) (*ContextResponse, error) {
 
 // --- Device ---------------------------------------------------------------
 
-// ChallengeResponse mirrors GET /device/challenge.
+// ChallengeResponse mirrors POST /device/challenge. PIN is empty for
+// password-authenticated callers (the CLI): it is the second factor and has
+// to be read in WP-Admin.
 type ChallengeResponse struct {
 	UserID        int    `json:"user_id"`
 	PIN           string `json:"pin"`
@@ -65,7 +69,8 @@ type ChallengeResponse struct {
 
 // Challenge requests a new pairing PIN.
 func (c *Client) Challenge(ctx context.Context, username, password string) (*ChallengeResponse, int, error) {
-	raw, status, err := c.DoRaw(ctx, "GET", "/device/challenge", nil, username, password)
+	body := map[string]string{"username": username, "password": password}
+	raw, status, err := c.DoRaw(ctx, "POST", "/device/challenge", body)
 	if err != nil {
 		return nil, status, err
 	}
@@ -74,6 +79,8 @@ func (c *Client) Challenge(ctx context.Context, username, password string) (*Cha
 
 // RegisterRequest is the body of POST /device/register.
 type RegisterRequest struct {
+	Username   string `json:"username"`
+	Password   string `json:"password"`
 	PIN        string `json:"pin"`
 	DeviceName string `json:"device_name"`
 }
@@ -89,7 +96,9 @@ type RegisterResponse struct {
 
 // Register validates a PIN and mints an Application Password.
 func (c *Client) Register(ctx context.Context, username, password string, body RegisterRequest) (*RegisterResponse, int, error) {
-	raw, status, err := c.DoRaw(ctx, "POST", "/device/register", body, username, password)
+	body.Username = username
+	body.Password = password
+	raw, status, err := c.DoRaw(ctx, "POST", "/device/register", body)
 	if err != nil {
 		return nil, status, err
 	}
@@ -147,32 +156,63 @@ func (c *Client) ListFiles(ctx context.Context) (*FilesResponse, error) {
 	return &out, nil
 }
 
-// FileResponse mirrors GET /theme/file.
+// FileResponse is a child-theme file with its raw bytes.
 type FileResponse struct {
-	Path     string `json:"path"`
-	Size     int    `json:"size"`
-	SHA256   string `json:"sha256"`
-	Contents string `json:"contents"`
+	Path     string
+	Size     int
+	SHA256   string
+	Contents []byte
 }
 
-// ReadFile fetches a single child-theme file by relative path.
+// ReadFile fetches a single child-theme file by relative path. Contents are
+// transferred base64-encoded so binary files (images, fonts) survive intact.
 func (c *Client) ReadFile(ctx context.Context, rel string) (*FileResponse, error) {
-	var out FileResponse
-	if err := c.Do(ctx, "GET", "/theme/file?path="+rel, nil, &out); err != nil {
+	var wire struct {
+		Path     string `json:"path"`
+		Size     int    `json:"size"`
+		SHA256   string `json:"sha256"`
+		Encoding string `json:"encoding"`
+		Contents string `json:"contents"`
+	}
+	q := url.Values{"path": {rel}, "encoding": {"base64"}}
+	if err := c.Do(ctx, "GET", "/theme/file?"+q.Encode(), nil, &wire); err != nil {
 		return nil, err
 	}
-	return &out, nil
+	out := &FileResponse{Path: wire.Path, Size: wire.Size, SHA256: wire.SHA256}
+	if wire.Encoding != "base64" {
+		// Plugin too old to honour encoding=base64: text only.
+		out.Contents = []byte(wire.Contents)
+		return out, nil
+	}
+	data, err := base64.StdEncoding.DecodeString(wire.Contents)
+	if err != nil {
+		return nil, fmt.Errorf("decode %s: %w", rel, err)
+	}
+	out.Contents = data
+	return out, nil
 }
 
-// PushFile is one file in a push payload.
+// PushFile is one file in a push payload. Contents is base64 when Encoding
+// is "base64" (always, when built with NewPushFile).
 type PushFile struct {
 	Path     string `json:"path"`
 	Contents string `json:"contents"`
+	Encoding string `json:"encoding,omitempty"`
+}
+
+// NewPushFile wraps raw file bytes for transfer.
+func NewPushFile(rel string, data []byte) PushFile {
+	return PushFile{
+		Path:     rel,
+		Contents: base64.StdEncoding.EncodeToString(data),
+		Encoding: "base64",
+	}
 }
 
 // PushRequest is the body of POST /theme/push.
 type PushRequest struct {
-	Files  []PushFile       `json:"files"`
+	Files  []PushFile        `json:"files"`
+	Delete []string          `json:"delete,omitempty"`
 	Device map[string]string `json:"device,omitempty"`
 }
 
@@ -180,7 +220,14 @@ type PushRequest struct {
 type PushResponse struct {
 	ManifestID string   `json:"manifest_id"`
 	Applied    []string `json:"applied"`
+	Deleted    []string `json:"deleted,omitempty"`
 	Count      int      `json:"count"`
+	// Status is "applied", or "review" when the site holds pushes for an
+	// administrator to approve in WP-Admin: nothing has changed there yet.
+	Status string `json:"status,omitempty"`
+	// Health is the post-deploy check result: "ok", "unreachable" (loopback
+	// blocked), "already_failing" (site was down before the push) or "skipped".
+	Health string `json:"health,omitempty"`
 }
 
 // Push uploads a batch of files (the plugin snapshots + lints + applies).
@@ -203,6 +250,11 @@ type HistoryEntry struct {
 	Count       int    `json:"count"`
 	Status      string `json:"status"`
 	RestoreCount int   `json:"restore_count"`
+	// Changes lists the files the entry touched (absent on old entries).
+	Changes []struct {
+		Path   string `json:"path"`
+		Action string `json:"action"`
+	} `json:"changes,omitempty"`
 }
 
 // HistoryResponse mirrors GET /history.

@@ -12,9 +12,10 @@ import (
 var historyLimit int
 
 var historyCmd = &cobra.Command{
-	Use:   "history",
-	Short: "Show the deployment history (pushes & rollbacks).",
-	Long: `Lists recent Vault manifests: manifest id, time, acting device, kind, file
+	Use:     "history",
+	Aliases: []string{"snapshots"},
+	Short:   "List snapshots (one per push or rollback).",
+	Long: `Lists recent snapshots: snapshot id, time, acting device, kind, file
 count, and status. Use --limit to change how many entries are shown (default 30).
 
 Pass a manifest id as an argument to inspect a single manifest (file list,

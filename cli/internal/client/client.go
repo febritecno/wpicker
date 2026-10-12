@@ -57,6 +57,10 @@ type ErrorDetail struct {
 	Line       int    `json:"line,omitempty"`
 	ManifestID string `json:"manifest_id,omitempty"`
 	Checked    int    `json:"checked,omitempty"`
+	// RolledBack is set when the server already restored the pre-push files
+	// (failed health check or a filesystem error mid-apply).
+	RolledBack bool `json:"rolled_back,omitempty"`
+	HTTPStatus int  `json:"http_status,omitempty"`
 }
 
 // RESTError wraps the server's error shape and satisfies the error interface.
@@ -152,6 +156,17 @@ func (c *Client) Do(ctx context.Context, method, path string, body any, out any)
 					_ = json.Unmarshal(env.Error, &ee.Details)
 				}
 				ee.Ok = false
+				// WordPress's own error shape — { code, message } at the top
+				// level — is what a refused permission check returns.
+				if ee.Details.Code == "" {
+					var wp struct {
+						Code    string `json:"code"`
+						Message string `json:"message"`
+					}
+					if json.Unmarshal(raw, &wp) == nil && wp.Code != "" {
+						ee.Details.Code, ee.Details.Message = wp.Code, wp.Message
+					}
+				}
 				// Status-code based code if the plugin didn't supply one.
 				if ee.Details.Code == "" {
 					ee.Details.Code = fmt.Sprintf("http_%d", resp.StatusCode)
@@ -176,9 +191,10 @@ func (c *Client) Do(ctx context.Context, method, path string, body any, out any)
 	return nil
 }
 
-// DoRaw performs a request and returns the raw response body (used by login,
-// where the Basic auth identity differs from the stored app password).
-func (c *Client) DoRaw(ctx context.Context, method, path string, body any, username, password string) ([]byte, int, error) {
+// DoRaw performs an unauthenticated request and returns the raw response body.
+// Used by login, where the credentials travel in the JSON body because core's
+// REST Basic auth only accepts Application Passwords.
+func (c *Client) DoRaw(ctx context.Context, method, path string, body any) ([]byte, int, error) {
 	url := c.Site + "/wp-json/" + Namespace + "/" + strings.TrimLeft(path, "/")
 
 	var reader io.Reader
@@ -194,7 +210,6 @@ func (c *Client) DoRaw(ctx context.Context, method, path string, body any, usern
 	if err != nil {
 		return nil, 0, err
 	}
-	req.SetBasicAuth(username, password)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", c.UserAgent)
 	if body != nil {

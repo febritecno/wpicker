@@ -85,12 +85,13 @@ final class Manager {
 	 * @param array<string,mixed> $device Acting device.
 	 * @param array<int,string>   $files  Relative files about to be affected.
 	 * @param string              $kind   'push' | 'rollback_safety'.
+	 * @param string|null         $id     Reuse this manifest id (approved review) instead of a new one.
 	 * @return array{ id: string, path: string, manifest: array<string,mixed> }
 	 *
 	 * @throws \RuntimeException If the child theme dir is unreadable.
 	 */
-	public function snapshot( array $device, array $files, string $kind = 'push' ): array {
-		$id           = $this->manifests->generate_id();
+	public function snapshot( array $device, array $files, string $kind = 'push', ?string $id = null ): array {
+		$id           = $id ?? $this->manifests->generate_id();
 		$target       = $this->dir_for( $id );
 		$theme_root   = $this->guard->theme_root();
 
@@ -102,8 +103,12 @@ final class Manager {
 			throw new \RuntimeException( 'Failed to create snapshot.' );
 		}
 
-		$manifest = $this->manifests->build_record( $id, $device, $files, $kind );
-		$this->manifests->add( $manifest );
+		// A push approved from review already has its manifest record.
+		$manifest = $this->manifests->get( $id );
+		if ( null === $manifest ) {
+			$manifest = $this->manifests->build_record( $id, $device, $files, $kind );
+			$this->manifests->add( $manifest );
+		}
 
 		return array(
 			'id'       => $id,
@@ -167,14 +172,12 @@ final class Manager {
 			throw new \RuntimeException( 'Snapshot not found: ' . $manifest_id );
 		}
 
-		$theme_root = $this->guard->theme_root();
-		$files      = $this->list_relative_files( $source );
+		$files = $this->list_relative_files( $source );
 
 		// Safety snapshot of the current state.
 		$safety = $this->snapshot( $device, $files, 'rollback_safety' );
 
-		// Overwrite live theme with snapshot contents.
-		if ( ! $this->copy_dir( $source, $theme_root ) ) {
+		if ( ! $this->mirror_into_theme( $source ) ) {
 			throw new \RuntimeException( 'Failed to restore snapshot.' );
 		}
 
@@ -191,6 +194,226 @@ final class Manager {
 			'safety_manifest_id' => $safety['id'],
 			'files'              => $files,
 		);
+	}
+
+	/**
+	 * Put the child theme back exactly as it was in a snapshot, without taking
+	 * a safety snapshot. Used to undo a push that failed mid-way or broke the
+	 * site, where the snapshot being restored IS the pre-push state.
+	 *
+	 * @param string $manifest_id Snapshot manifest id.
+	 * @return bool
+	 */
+	public function revert( string $manifest_id ): bool {
+		$source = $this->dir_for( $manifest_id );
+		return is_dir( $source ) && $this->mirror_into_theme( $source );
+	}
+
+	/**
+	 * Make the child theme an exact copy of a snapshot directory: copy every
+	 * snapshot file over, then delete theme files the snapshot does not have.
+	 *
+	 * @param string $source Snapshot directory.
+	 * @return bool
+	 */
+	private function mirror_into_theme( string $source ): bool {
+		$theme_root = $this->guard->theme_root();
+		if ( ! $this->copy_dir( $source, $theme_root ) ) {
+			return false;
+		}
+
+		$keep = array_flip( $this->list_relative_files( $source ) );
+		foreach ( $this->list_relative_files( $theme_root ) as $rel ) {
+			if ( ! isset( $keep[ $rel ] ) ) {
+				@unlink( $theme_root . '/' . $rel );
+			}
+		}
+		$this->remove_empty_dirs( $theme_root );
+
+		foreach ( array_keys( $keep ) as $rel ) {
+			self::invalidate( $theme_root . '/' . $rel );
+		}
+		return true;
+	}
+
+	/**
+	 * Drop a file from opcache so the next request sees what is on disk
+	 * instead of bytecode cached up to opcache.revalidate_freq seconds ago.
+	 *
+	 * @param string $absolute Absolute file path.
+	 * @return void
+	 */
+	public static function invalidate( string $absolute ): void {
+		if ( '.php' === substr( $absolute, -4 ) && function_exists( 'opcache_invalidate' ) ) {
+			@opcache_invalidate( $absolute, true );
+		}
+	}
+
+	/**
+	 * Remove empty sub-directories below a root (the root itself is kept).
+	 *
+	 * @param string $root Root directory.
+	 * @return void
+	 */
+	public function remove_empty_dirs( string $root ): void {
+		if ( ! is_dir( $root ) ) {
+			return;
+		}
+		$it = new \RecursiveIteratorIterator(
+			new \RecursiveDirectoryIterator( $root, \FilesystemIterator::SKIP_DOTS ),
+			\RecursiveIteratorIterator::CHILD_FIRST
+		);
+		foreach ( $it as $entry ) {
+			if ( $entry->isDir() ) {
+				@rmdir( $entry->getPathname() );
+			}
+		}
+	}
+
+	/**
+	 * Directory holding the files of a push that is waiting for review.
+	 *
+	 * @param string $manifest_id Manifest id.
+	 * @return string
+	 */
+	public function staged_dir( string $manifest_id ): string {
+		return $this->root() . '/' . $manifest_id . '.staged';
+	}
+
+	/**
+	 * Directory holding copies of the files a push wrote, so the admin can
+	 * diff "before" (the snapshot) against "after" later on.
+	 *
+	 * @param string $manifest_id Manifest id.
+	 * @return string
+	 */
+	public function after_dir( string $manifest_id ): string {
+		return $this->root() . '/' . $manifest_id . '.after';
+	}
+
+	/**
+	 * Hold a validated push for review instead of applying it.
+	 *
+	 * Writes the incoming files under staged_dir() together with a plan that
+	 * remembers what each target looked like at submission time, so a later
+	 * approval can tell whether the site moved on in the meantime.
+	 *
+	 * @param array<string,mixed>                                  $device Acting device.
+	 * @param array<int,array{rel:string,abs:string,contents:string}> $files  Files to write.
+	 * @param array<int,array{rel:string,abs:string}>               $remove Files to delete.
+	 * @return array<string,mixed> The manifest record.
+	 *
+	 * @throws \RuntimeException If the staging area cannot be written.
+	 */
+	public function stage( array $device, array $files, array $remove ): array {
+		$id  = $this->manifests->generate_id();
+		$dir = $this->staged_dir( $id );
+
+		$plan = array(
+			'files'  => array(),
+			'delete' => array(),
+		);
+		foreach ( $files as $f ) {
+			$target = $dir . '/files/' . $f['rel'];
+			if ( ! wp_mkdir_p( dirname( $target ) ) || false === file_put_contents( $target, $f['contents'] ) ) {
+				$this->remove_dir( $dir );
+				throw new \RuntimeException( 'Could not stage ' . $f['rel'] );
+			}
+			$plan['files'][] = array(
+				'path'   => $f['rel'],
+				'before' => is_file( $f['abs'] ) ? hash_file( 'sha256', $f['abs'] ) : null,
+			);
+		}
+		foreach ( $remove as $r ) {
+			$plan['delete'][] = array(
+				'path'   => $r['rel'],
+				'before' => is_file( $r['abs'] ) ? hash_file( 'sha256', $r['abs'] ) : null,
+			);
+		}
+		if ( ! wp_mkdir_p( $dir ) || false === file_put_contents( $dir . '/plan.json', wp_json_encode( $plan ) ) ) {
+			$this->remove_dir( $dir );
+			throw new \RuntimeException( 'Could not write the staged plan.' );
+		}
+
+		$affected           = array_merge( array_column( $files, 'rel' ), array_column( $remove, 'rel' ) );
+		$manifest           = $this->manifests->build_record( $id, $device, $affected, 'push' );
+		$manifest['status'] = 'review';
+		$this->manifests->add( $manifest );
+
+		return $manifest;
+	}
+
+	/**
+	 * Read back a staged push.
+	 *
+	 * @param string $manifest_id Manifest id.
+	 * @return array{ files: array<int,array{path:string,before:?string,contents:string}>, delete: array<int,array{path:string,before:?string}> }|null
+	 */
+	public function staged( string $manifest_id ): ?array {
+		$dir  = $this->staged_dir( $manifest_id );
+		$plan = is_readable( $dir . '/plan.json' ) ? json_decode( (string) file_get_contents( $dir . '/plan.json' ), true ) : null;
+		if ( ! is_array( $plan ) ) {
+			return null;
+		}
+		$files = array();
+		foreach ( (array) ( $plan['files'] ?? array() ) as $f ) {
+			$contents = @file_get_contents( $dir . '/files/' . $f['path'] );
+			if ( false === $contents ) {
+				return null;
+			}
+			$files[] = array(
+				'path'     => (string) $f['path'],
+				'before'   => $f['before'] ?? null,
+				'contents' => $contents,
+			);
+		}
+		return array(
+			'files'  => $files,
+			'delete' => (array) ( $plan['delete'] ?? array() ),
+		);
+	}
+
+	/**
+	 * Throw away a staged push (approved, rejected, or replaced).
+	 *
+	 * @param string $manifest_id Manifest id.
+	 * @return void
+	 */
+	public function discard_staged( string $manifest_id ): void {
+		$this->remove_dir( $this->staged_dir( $manifest_id ) );
+	}
+
+	/**
+	 * Keep a copy of one file as a push left it (see after_dir()).
+	 *
+	 * @param string $manifest_id Manifest id.
+	 * @param string $rel         Theme-relative path.
+	 * @param string $contents    File contents written.
+	 * @return void
+	 */
+	public function remember_after( string $manifest_id, string $rel, string $contents ): void {
+		$target = $this->after_dir( $manifest_id ) . '/' . $rel;
+		if ( wp_mkdir_p( dirname( $target ) ) ) {
+			@file_put_contents( $target, $contents );
+		}
+	}
+
+	/**
+	 * Permanently delete one entry: its manifest record, its snapshot, and any
+	 * staged or after-copies. The theme itself is not touched.
+	 *
+	 * @param string $manifest_id Manifest id.
+	 * @return bool False if there is no such entry.
+	 */
+	public function delete( string $manifest_id ): bool {
+		if ( null === $this->manifests->get( $manifest_id ) ) {
+			return false;
+		}
+		$this->remove_dir( $this->dir_for( $manifest_id ) );
+		$this->remove_dir( $this->after_dir( $manifest_id ) );
+		$this->remove_dir( $this->staged_dir( $manifest_id ) );
+		$this->manifests->delete( $manifest_id );
+		return true;
 	}
 
 	/**
@@ -215,10 +438,13 @@ final class Manager {
 				continue;
 			}
 			// Never silently drop aborted (failed) snapshots — valuable for forensics.
-			if ( ( $m['status'] ?? '' ) === 'aborted' ) {
+			// Nor a push that is still waiting for someone to review it.
+			if ( in_array( $m['status'] ?? '', array( 'aborted', 'review' ), true ) ) {
 				continue;
 			}
 			$this->remove_dir( $this->dir_for( $id ) );
+			$this->remove_dir( $this->after_dir( $id ) );
+			$this->remove_dir( $this->staged_dir( $id ) );
 			$this->manifests->delete( $id );
 		}
 	}

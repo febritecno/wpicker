@@ -13,11 +13,15 @@ declare( strict_types = 1 );
 namespace WPicker;
 
 use WPicker\Auth\Capability;
+use WPicker\REST\Backup;
 use WPicker\REST\Base;
 use WPicker\REST\Context;
 use WPicker\REST\Device;
+use WPicker\REST\Inspect;
+use WPicker\REST\Page;
 use WPicker\REST\Theme;
 use WPicker\REST\Vault;
+use WPicker\REST\Vuln;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -103,7 +107,7 @@ final class Core {
 
 		// Track device last-seen: when an Application Password is used against
 		// our namespace, bump the matching device's last_seen_gmt.
-		add_filter( 'rest_pre_dispatch', array( $this, 'touch_device' ), 10, 4 );
+		add_filter( 'rest_pre_dispatch', array( $this, 'touch_device' ), 10, 3 );
 
 		if ( is_admin() ) {
 			$this->admin = new \WPicker\Admin\Dashboard( $this->caps );
@@ -120,12 +124,22 @@ final class Core {
 	 * @return void
 	 */
 	public function register_rest_routes(): void {
+		$deployer = new Sync\Deployer(
+			$this->path_guard,
+			$this->lint,
+			$this->vault,
+			$this->manifests,
+			new Health\Probe( $this->path_guard )
+		);
+
 		$controllers = array(
 			new Context( $this->context ),
 			new Device( $this->caps ),
-			new Theme( $this->path_guard, $this->lint, $this->vault ),
-			new Vault( $this->vault ),
+			new Theme( $this->path_guard, $deployer ),
+			new Vault( $this->vault, $this->path_guard, $deployer ),
 			new Vuln(),
+			new Backup(),
+			new Inspect(),
 			new Page(),
 		);
 
@@ -150,11 +164,11 @@ final class Core {
 	 * @param mixed           $result  Precomputed result (null by default).
 	 * @param \WP_REST_Server $server  REST server.
 	 * @param \WP_REST_Request $request Request.
-	 * @param string          $route   Matched route.
 	 * @return mixed Unchanged $result.
 	 */
-	public function touch_device( $result, $server, $request, $route ) {
-		if ( ! is_string( $route ) || 0 !== strpos( $route, '/' . self::REST_NAMESPACE . '/' ) ) {
+	public function touch_device( $result, $server, $request ) {
+		$route = $request instanceof \WP_REST_Request ? $request->get_route() : '';
+		if ( 0 !== strpos( $route, '/' . self::REST_NAMESPACE . '/' ) ) {
 			return $result;
 		}
 		$user_id = get_current_user_id();
