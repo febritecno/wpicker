@@ -40,15 +40,23 @@ every use is listed there.`
 
 var logsCmd = &cobra.Command{
 	Use:   "logs",
-	Short: "Show the site's PHP and WordPress errors, grouped.",
-	Long: `Reads the site's error logs — PHP's error log, wp-content/debug.log, and the
-log written by "WordPress debug logging" — and shows each distinct error once,
-with how often and when it happened, most recent first.
+	Short: "Show the site's PHP, WordPress and WooCommerce/payment errors, grouped.",
+	Long: `Reads the site's logs — PHP's error log, wp-content/debug.log, the log written
+by "WordPress debug logging", and WooCommerce's logs (which is where payment
+gateways such as Stripe and PayPal write) — and shows each distinct problem
+once, with how often and when it happened, most recent first. Order numbers,
+amounts and request ids are ignored when grouping, and card numbers, keys and
+tokens are masked before anything leaves the site.
 
   wpicker logs                          everything in the logs
   wpicker logs --since 30m              the last 30 minutes
-  wpicker logs --level warning          warnings and fatals only
-  wpicker logs --grep checkout --trace  errors mentioning "checkout", with stack traces
+  wpicker logs --level error            gateway/WooCommerce errors and PHP fatals
+  wpicker logs --source wc              all WooCommerce logs (payments included)
+  wpicker logs --source wc:stripe       one WooCommerce log (names are in "wpicker status")
+  wpicker logs --grep checkout --trace  entries mentioning "checkout", with details
+
+Levels, most severe first: fatal (PHP crashes), error (failed payments, gateway
+errors), warning, notice, deprecated, info.
 
 If the logs are empty, the site may not be logging at all: turn it on with
 ` + "`wpicker debug on`" + `, reproduce the problem, and look again.
@@ -90,7 +98,11 @@ If the logs are empty, the site may not be logging at all: turn it on with
 				times = fmt.Sprintf("×%d, %s → %s", e.Count, shortTime(e.First), shortTime(e.Last))
 			}
 			fmt.Printf("%-10s %s\n", strings.ToUpper(e.Level), e.Message)
-			fmt.Printf("           %s%s\n", times, where)
+			src := ""
+			if strings.HasPrefix(e.Source, "wc:") {
+				src = "  [" + e.Source + "]"
+			}
+			fmt.Printf("           %s%s%s\n", times, where, src)
 			if logsTrace {
 				for _, t := range e.Trace {
 					fmt.Printf("             %s\n", t)
@@ -144,13 +156,15 @@ touched. It costs a little speed: turn it off when you are done.
 	Args:      cobra.MaximumNArgs(1),
 	ValidArgs: []string{"on", "off", "status"},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, _, err := mustClient()
-		if err != nil {
-			return err
-		}
 		action := "status"
 		if len(args) == 1 {
 			action = args[0]
+		}
+		// on/off change a setting on the site; status only looks.
+		curWrites = action == "on" || action == "off"
+		c, _, err := mustClient()
+		if err != nil {
+			return err
 		}
 		switch action {
 		case "on", "off":
@@ -457,9 +471,9 @@ func printRows(columns []string, rows [][]*string) {
 
 func init() {
 	logsCmd.Flags().StringVar(&logsSince, "since", "", "only entries from the last 30m, 2h, 1d… (default: everything in the logs)")
-	logsCmd.Flags().StringVar(&logsLevel, "level", "info", "least severe level to show: fatal, warning, notice, deprecated, info")
+	logsCmd.Flags().StringVar(&logsLevel, "level", "info", "least severe level to show: fatal, error, warning, notice, deprecated, info")
 	logsCmd.Flags().StringVar(&logsGrep, "grep", "", "only entries whose message or file contains this text")
-	logsCmd.Flags().StringVar(&logsSource, "source", "all", "which log: all, php, wp (debug.log), diag (WPicker's debug log)")
+	logsCmd.Flags().StringVar(&logsSource, "source", "all", "which log: all, php, wp (debug.log), diag (WPicker's debug log), wc (all WooCommerce logs) or wc:<name>")
 	logsCmd.Flags().IntVar(&logsLimit, "limit", 50, "distinct entries to show")
 	logsCmd.Flags().BoolVar(&logsTrace, "trace", false, "include stack traces")
 

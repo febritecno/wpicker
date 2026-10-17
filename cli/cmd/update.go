@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
 	"time"
@@ -18,7 +19,7 @@ var updateCmd = &cobra.Command{
 	Short: "Update the wpicker CLI to the latest version",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Checking for updates...")
-		
+
 		client := &http.Client{Timeout: 10 * time.Second}
 		req, err := http.NewRequestWithContext(cmd.Context(), "GET", "https://api.github.com/repos/febritecno/wpicker/releases/latest", nil)
 		if err != nil {
@@ -104,6 +105,12 @@ var updateCmd = &cobra.Command{
 		}
 
 		fmt.Println("✓ Update successful! You are now running version", latestVersion)
+
+		// This process still holds the old guide: ask the new binary to refresh
+		// the agent files WPicker wrote earlier. Best effort.
+		refresh := exec.Command(exePath, "connect", "--refresh")
+		refresh.Stdout, refresh.Stderr = os.Stdout, os.Stderr
+		_ = refresh.Run()
 		return nil
 	},
 }

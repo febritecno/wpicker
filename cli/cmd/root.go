@@ -12,7 +12,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"wpicker/internal/client"
 	"wpicker/internal/config"
 )
 
@@ -31,8 +30,9 @@ var loadedCfg *config.Config
 
 // rootCmd is the entry command.
 var rootCmd = &cobra.Command{
-	Use:   "wpicker",
-	Short: "WPicker — bridge your local AI agent to WordPress.",
+	Use:     "wpicker",
+	Version: Version,
+	Short:   "WPicker — bridge your local AI agent to WordPress.",
 	Long: `WPicker pairs a WordPress site (plugin "The Eyes") with this CLI ("The Hands").
 
 Authenticate with ` + "`wpicker login`" + `, then sync your child theme, inspect deployment
@@ -40,6 +40,9 @@ history, and roll back instantly. Every push is lint-checked and snapshotted,
 so an AI agent can self-heal after a failed deploy.`,
 	SilenceUsage:  true,
 	SilenceErrors: true, // main prints the error once
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		curWrites = commandWrites(cmd)
+	},
 }
 
 // Execute runs the root command.
@@ -48,7 +51,7 @@ func Execute() error {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&flagSite, "site", "", "override the configured site URL")
+	rootCmd.PersistentFlags().StringVar(&flagSite, "site", "", "which site to use: its id, name or address (must be one you are logged in to)")
 	rootCmd.PersistentFlags().BoolVar(&flagJSON, "json", false, "emit machine-readable JSON (for AI agents)")
 	rootCmd.PersistentFlags().BoolVarP(&flagVerbose, "verbose", "v", false, "verbose output")
 
@@ -58,38 +61,8 @@ func init() {
 	rootCmd.AddCommand(themeCmd)
 	rootCmd.AddCommand(historyCmd)
 	rootCmd.AddCommand(rollbackCmd)
-	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(deviceCmd)
 	rootCmd.AddCommand(whoamiCmd)
-}
-
-// loadConfig loads the on-disk config once.
-func loadConfig() (*config.Config, error) {
-	if loadedCfg != nil {
-		return loadedCfg, nil
-	}
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, err
-	}
-	loadedCfg = cfg
-	return cfg, nil
-}
-
-// mustClient loads config and returns a REST client. Errors if not logged in.
-func mustClient() (*client.Client, *config.Config, error) {
-	cfg, err := loadConfig()
-	if err != nil {
-		return nil, nil, err
-	}
-	site := cfg.Site
-	if flagSite != "" {
-		site = flagSite
-	}
-	if site == "" || cfg.Username == "" || cfg.AppPassword == "" {
-		return nil, cfg, fmt.Errorf("not logged in: run `wpicker login` first")
-	}
-	return client.New(site, cfg.Username, cfg.AppPassword, nil), cfg, nil
 }
 
 // ctxFrom returns a context bound to the cobra command.

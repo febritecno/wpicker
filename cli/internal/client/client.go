@@ -35,7 +35,7 @@ type Client struct {
 // New builds a Client. If httpClient is nil, a default one is used.
 func New(site, username, appPassword string, httpClient *http.Client) *Client {
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: DefaultTimeout}
+		httpClient = &http.Client{Timeout: DefaultTimeout, CheckRedirect: refuseUnsafeRedirect}
 	}
 	site = strings.TrimRight(site, "/")
 	return &Client{
@@ -234,4 +234,31 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "…"
+}
+
+// refuseUnsafeRedirect stops a redirect from carrying the Application Password
+// somewhere it was not meant to go. Go already drops Authorization when the
+// host changes, but it keeps it on an https -> http downgrade of the same host,
+// and a login POST carries the admin password in its body. Neither is followed.
+func refuseUnsafeRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	first := via[0]
+	from, to := strings.ToLower(first.URL.Hostname()), strings.ToLower(req.URL.Hostname())
+	// The same host, or a subdomain of it (example.com -> www.example.com), is
+	// where Go itself forwards credentials; anything else is not ours to trust.
+	// A different port is a different service (two local sites on one machine),
+	// so credentials may not follow it; both being the default port is the same
+	// thing as http -> https on one address.
+	samePort := first.URL.Port() == req.URL.Port()
+	if to != from && !strings.HasSuffix(to, "."+from) || !samePort {
+		return fmt.Errorf("refusing to follow a redirect from %s to another host or port (%s): credentials would go with it.\n"+
+			"  If the site moved, log in again at its new address: wpicker login %s://%s",
+			first.URL.Host, req.URL.Host, req.URL.Scheme, req.URL.Host)
+	}
+	if first.URL.Scheme == "https" && req.URL.Scheme != "https" {
+		return fmt.Errorf("refusing to follow a redirect from https to %s: credentials would travel unencrypted", req.URL.Scheme)
+	}
+	return nil
 }

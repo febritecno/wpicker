@@ -55,14 +55,15 @@ plugin:
 On failure, a structured error is written to ./.wpicker/last-error.json so an
 AI agent can inspect, fix, and re-push.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, cfg, err := mustClient()
-		if err != nil {
-			return err
-		}
 		root := pullOut
 		if root == "" {
 			root = "."
 		}
+		c, cfg, err := mustClientAt(root, true)
+		if err != nil {
+			return err
+		}
+		autoLinkTheme(root, lastResolved, false)
 
 		manifest, err := sync.LoadManifest(root)
 		if err != nil {

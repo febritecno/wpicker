@@ -154,18 +154,21 @@ func saveIfDirty(root string, manifest *sync.Manifest, st *sync.Status, remote m
 }
 
 func loadSyncState(cmd *cobra.Command) (*syncState, error) {
-	c, cfg, err := mustClient()
-	if err != nil {
-		return nil, err
-	}
 	root := pullOut
 	if root == "" {
 		root = "."
+	}
+	// The site follows the working folder (--out), not the shell's directory.
+	c, cfg, err := mustClientAt(root, true)
+	if err != nil {
+		return nil, err
 	}
 	files, err := c.ListFiles(ctxFrom(cmd))
 	if err != nil {
 		return nil, err
 	}
+	// First successful contact: remember which site this folder belongs to.
+	autoLinkTheme(root, lastResolved, cmd.Name() == "pull")
 	manifest, err := sync.LoadManifest(root)
 	if err != nil {
 		return nil, fmt.Errorf("load local manifest: %w", err)

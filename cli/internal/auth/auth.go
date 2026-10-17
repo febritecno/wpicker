@@ -8,7 +8,7 @@
 //   3. Prompt for the PIN.
 //   4. POST /device/register with the PIN → plugin mints an Application
 //      Password and returns it (one-time).
-//   5. Persist {site, username, app_password, device_id} to config.json.
+//   5. Return the pairing; the caller stores it next to the other sites.
 package auth
 
 import (
@@ -23,37 +23,66 @@ import (
 	"wpicker/internal/config"
 )
 
+// Prefill is what the pairing prompts start with. With Fixed set, the site
+// address is not asked for (re-pairing a site that is already known).
+type Prefill struct {
+	URL      string
+	Username string
+	Fixed    bool
+}
+
+// Result is a completed pairing. Login does not save it: the caller stores it
+// (under a lock, next to the other sites) so a pairing can never overwrite a
+// login to a different site.
+type Result struct {
+	URL           string
+	Username      string
+	AppPassword   string
+	DeviceID      string
+	DeviceName    string
+	PluginVersion string
+}
+
 // Login performs the interactive pairing flow.
 //
 // The reader/writer are injected so the flow can be tested without a TTY.
-// tempBasic is the user's main credentials (username/password) used ONLY for
-// the challenge + register calls; it is never persisted.
-func Login(ctx context.Context, cfg *config.Config, cliVersion string, in io.Reader, out io.Writer) error {
+// The user's main password is used ONLY for the challenge + register calls;
+// it is never persisted.
+func Login(ctx context.Context, defaults Prefill, cliVersion string, in io.Reader, out io.Writer) (*Result, error) {
 	r := bufio.NewReader(in)
 
 	// 1. Site URL.
-	site := prompt(out, r, "WordPress site URL", cfg.Site)
-	site = strings.TrimRight(strings.TrimSpace(site), "/")
+	site := defaults.URL
+	if defaults.Fixed {
+		fmt.Fprintf(out, "WordPress site: %s\n", site)
+	} else {
+		site = prompt(out, r, "WordPress site URL", defaults.URL)
+	}
+	site = strings.TrimSpace(site)
 	if site == "" {
-		return fmt.Errorf("site URL is required")
+		return nil, fmt.Errorf("site URL is required")
 	}
-	if !strings.HasPrefix(site, "http://") && !strings.HasPrefix(site, "https://") {
-		site = "https://" + site
+	norm, err := config.NormalizeURL(site)
+	if err != nil {
+		return nil, err
 	}
+	site = norm
+	// The password is about to be sent to this address: show exactly where.
+	fmt.Fprintf(out, "→ Your admin password will be sent to %s\n", site)
 
 	// 2. Username.
-	username := prompt(out, r, "Admin username", cfg.Username)
+	username := prompt(out, r, "Admin username", defaults.Username)
 	if username == "" {
-		return fmt.Errorf("username is required")
+		return nil, fmt.Errorf("username is required")
 	}
 
 	// 3. Main password (used once, never stored).
 	password, err := readPassword(out, r, "Admin password (used only to pair, never stored)")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if password == "" {
-		return fmt.Errorf("password is required")
+		return nil, fmt.Errorf("password is required")
 	}
 
 	// Bootstrap a client with the TEMPORARY main credentials.
@@ -63,7 +92,7 @@ func Login(ctx context.Context, cfg *config.Config, cliVersion string, in io.Rea
 	fmt.Fprintln(out, "→ Requesting pairing PIN…")
 	challenge, status, err := c.Challenge(ctx, username, password)
 	if err != nil {
-		return fmt.Errorf("challenge failed (HTTP %d): %w", status, err)
+		return nil, fmt.Errorf("challenge failed (HTTP %d): %w", status, err)
 	}
 
 	if challenge.PluginVersion != "" && challenge.PluginVersion != cliVersion {
@@ -79,7 +108,7 @@ func Login(ctx context.Context, cfg *config.Config, cliVersion string, in io.Rea
 	// 5. Read the PIN from the user (confirms human-in-the-loop).
 	pin, err := readPassword(out, r, "Enter the 6-digit PIN shown in WP-Admin")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	pin = strings.TrimSpace(pin)
 
@@ -92,28 +121,19 @@ func Login(ctx context.Context, cfg *config.Config, cliVersion string, in io.Rea
 		DeviceName: deviceName,
 	})
 	if err != nil {
-		return fmt.Errorf("register failed (HTTP %d): %w", status, err)
-	}
-
-	// 7. Persist.
-	cfg.Site = site
-	cfg.Username = username
-	cfg.AppPassword = reg.AppPassword
-	cfg.DeviceID = reg.DeviceID
-	cfg.DeviceName = reg.DeviceName
-	if err := cfg.Save(); err != nil {
-		return fmt.Errorf("save config: %w", err)
+		return nil, fmt.Errorf("register failed (HTTP %d): %w", status, err)
 	}
 
 	fmt.Fprintf(out, "✓ Paired as device %q (%s).\n", reg.DeviceName, reg.DeviceID)
-	fmt.Fprintf(out, "  Credentials stored in ~/%s/%s\n", config.DirName, config.FileName)
 	fmt.Fprintln(out, "  Your main password was NOT stored.")
-	return nil
-}
-
-// Logout removes the stored config.
-func Logout() error {
-	return config.Clear()
+	return &Result{
+		URL:           site,
+		Username:      username,
+		AppPassword:   reg.AppPassword,
+		DeviceID:      reg.DeviceID,
+		DeviceName:    reg.DeviceName,
+		PluginVersion: challenge.PluginVersion,
+	}, nil
 }
 
 // prompt prints a prompt and reads a line, returning a default if empty.

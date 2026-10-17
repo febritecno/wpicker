@@ -89,7 +89,7 @@ func (c *Client) DownloadBackup(ctx context.Context, id, dest string, total int6
 	}
 
 	// The archive can be large: no overall timeout, only the context.
-	httpClient := &http.Client{Transport: c.HTTP.Transport}
+	httpClient := &http.Client{Transport: c.HTTP.Transport, CheckRedirect: c.HTTP.CheckRedirect}
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("download: %w", err)

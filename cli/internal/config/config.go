@@ -21,7 +21,12 @@ const (
 )
 
 // Config is the on-disk CLI configuration.
+// Config is the single site a command works with: the resolved view of one
+// Site in the store. It is also the shape of the original ~/.wpicker/config.json,
+// which is still READ (to import an older login) but never written any more.
 type Config struct {
+	ID          int    `json:"-"`            // id in sites.json (0 for an unsaved view)
+	Name        string `json:"-"`            // short name in sites.json
 	Site        string `json:"site"`         // e.g. https://example.com
 	Username    string `json:"username"`     // WP admin username
 	AppPassword string `json:"app_password"` // WordPress Application Password
@@ -75,35 +80,6 @@ func Load() (*Config, error) {
 }
 
 // Save writes the config to disk with mode 0600.
-func (c *Config) Save() error {
-	p, err := Path()
-	if err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return err
-	}
-	// Write atomically with restrictive perms.
-	tmp, err := os.CreateTemp(filepath.Dir(p), ".config-*.json")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if err := os.Chmod(tmp.Name(), 0o600); err != nil {
-		return err
-	}
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), p)
-}
-
-// IsLoggedIn reports whether the config has enough to authenticate.
 func (c *Config) IsLoggedIn() bool {
 	return c.Site != "" && c.Username != "" && c.AppPassword != ""
 }
@@ -120,13 +96,3 @@ func (c *Config) AssertLoggedIn() error {
 }
 
 // Clear removes the config file (used by `wpicker logout`).
-func Clear() error {
-	p, err := Path()
-	if err != nil {
-		return err
-	}
-	if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	return nil
-}

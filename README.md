@@ -57,6 +57,20 @@ curl -sL https://raw.githubusercontent.com/febritecno/wpicker/main/install.sh | 
 wpicker --help
 ```
 
+The installer also teaches the AI agents it finds in your home directory (Claude Code, Codex, Gemini CLI) how to use WPicker, so `/wpicker` works in Claude Code right away. Skip that with `bash -s -- install --no-agents`.
+
+Other agents are set up per project, from the project folder:
+
+```bash
+wpicker connect                    # the agents it finds in this project (else AGENTS.md)
+wpicker connect --agent all        # Claude Code, Cursor, Codex, Gemini, Copilot, Windsurf, Cline
+wpicker connect --agent claude --global
+```
+
+Safety: the instruction files are only written inside the project (never through a symbolic link that leads out of it), a file you wrote is never replaced without `--force`, and `login` asks before touching a project. Run `connect` as yourself, not with `sudo`. Your pairing is per user, not per project, so when you open a repository you do not trust, do not let your agent run `wpicker` freely there: allow only the read-only commands (`map`, `logs`, `find`, `files`, `db`, `guide`) and keep `theme push` and `rollback` on ask.
+
+Agents that read a file in every conversation get a short pointer and fetch the full instructions with `wpicker guide` only when the task is about the site. Files you already have (`AGENTS.md`, `GEMINI.md`) only get a marked block added. Run `wpicker connect` again after upgrading to refresh.
+
 Change `install` to `remove` to uninstall. To build from source instead (Go 1.21+):
 
 ```bash
@@ -74,9 +88,26 @@ wpicker login
 
 It asks for the site URL, an administrator username and password, and a **6-digit PIN**. The PIN appears in **WP-Admin → WPicker → Devices** the moment you run the command — read it there and type it in.
 
-- The password is used once to pair and is never stored. The CLI keeps a separate, revocable credential for this device in `~/.wpicker/config.json`.
-- Check the connection with `wpicker whoami`, or ask the site to describe itself with `wpicker context`.
-- Remove a device any time from WP-Admin → WPicker → Devices, or with `wpicker device revoke <id>`.
+- The password is used once to pair and is never stored. The CLI keeps a separate, revocable credential for this device in `~/.wpicker/sites.json` (readable only by you).
+- You can pair **several sites**; logging in to another one does not touch the first. See them with `wpicker sites`.
+- Check which site a folder uses with `wpicker whoami`, or ask the site to describe itself with `wpicker context`.
+- Remove a site any time with `wpicker sites delete <id>` (it also revokes this computer on the site), or from WP-Admin → WPicker → Devices.
+
+#### Several sites and several folders
+
+Each project folder works with one site. `wpicker theme pull` links the folder to the site it pulled from (a small `.wpicker/project.json`, no secrets), and from then on every command in that folder uses that site. For any other folder:
+
+```bash
+wpicker sites                  # id, name, address, user, status, linked folders
+wpicker sites link shop        # use "shop" in this folder from now on
+wpicker --site blog logs       # one command against another site
+wpicker sites stop blog        # keep its login but refuse to use it (start to undo)
+wpicker sites delete blog      # forget it and revoke this computer on it
+```
+
+With one site nothing needs choosing. With several, commands that only *look* (logs, map, files) fall back to your default site (`wpicker sites use <id>`) and say so on stderr; commands that *change* a site (theme push, rollback, page, restore) refuse to guess and ask you to link the folder or pass `--site`. `--site` takes an id, name or address of a site you are already logged in to; it can no longer point your login at another address.
+
+Upgrading: your existing login is picked up automatically as site 1. `~/.wpicker/config.json` is left untouched, so an older `wpicker` binary on your PATH keeps working with it.
 
 ### 4. Get the site onto your computer
 
@@ -243,9 +274,7 @@ Everything else in the database **can** be read, including customer and personal
 
 ## Using it with an AI agent
 
-```bash
-wpicker init      # writes .cursorrules with the workflow and guardrails for agents
-```
+There is nothing to set up per project. The installer teaches Claude Code, Codex and Gemini CLI about WPicker, and `wpicker login` sets up whichever agents it finds in the folder you log in from (Cursor, Copilot, Windsurf, Cline too). In Claude Code, ask about your site or type `/wpicker`. `wpicker update` refreshes the instruction files WPicker wrote, so they never go stale; `wpicker guide` prints the full instructions an agent follows.
 
 - Every command takes `--json` for machine-readable output.
 - `wpicker context` gives the agent the facts it would otherwise guess: WordPress and PHP versions, active theme, plugins, theme settings.
@@ -258,14 +287,20 @@ Works with any agent that can run shell commands (Claude Code, Cursor, Copilot, 
 
 ## Command reference
 
-Global flags: `--json`, `--site <url>`, `-v`.
+Global flags: `--json`, `--site <id|name|address>`, `-v`.
 
 | Command | Purpose |
 |---|---|
-| `wpicker login` / `logout` / `whoami` | Pair this device, unpair, show the pairing |
-| `wpicker device list` / `revoke <id>` | Paired devices |
+| `wpicker login [address]` | Pair this computer with a site (add it, or pair it again) |
+| `wpicker sites` | List your sites with live status and linked folders |
+| `wpicker sites login\|stop\|start\|delete\|use <id>` | Re-pair, switch off/on, forget (revokes this computer), make default |
+| `wpicker sites link [id]` / `unlink` | Use a site in this folder from now on / stop |
+| `wpicker whoami` | Which site this folder uses, and why |
+| `wpicker doctor` | Checklist: is WPicker itself set up and working |
+| `wpicker device list` / `revoke <id>` | Advanced: every computer paired with the site |
 | `wpicker context [--save]` | Site facts for you or your agent |
-| `wpicker init` | Create `.wpicker/` and `.cursorrules` in the current folder |
+| `wpicker connect [--agent …]` | Write the instructions AI agents follow (Claude Code skill `/wpicker`, `AGENTS.md`, Cursor, Gemini, Copilot, Windsurf, Cline); `--refresh` updates the ones already written |
+| `wpicker guide` | Print the full agent instructions |
 | `wpicker theme status` | To push, to pull, conflicts — and who pushed |
 | `wpicker theme diff [path…]` | Line diff, local vs. site |
 | `wpicker theme pull [path…]` | Apply changes from the site, merging where needed |

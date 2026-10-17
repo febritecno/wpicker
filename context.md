@@ -33,7 +33,7 @@ cli/
   cmd/                 perintah cobra: login, context, theme, history, rollback, page, scan, device, init, update
   internal/auth/       alur login PIN
   internal/client/     HTTP client + method per endpoint (api.go)
-  internal/config/     ~/.wpicker/config.json
+  internal/config/     ~/.wpicker/sites.json (multi-site, flock) + config.json lama (hanya dibaca/diimpor)
   internal/sync/       walk, sha256, diff, tulis atomik, manifest lokal
   internal/migrate/    restore backup: ekstrak tar, baca wp-config, impor SQL, ganti URL (sadar PHP-serialized)
   internal/tui/        output terminal / JSON
@@ -66,9 +66,10 @@ Flag global: `--site <url>` (override site), `--json` (output mesin, untuk agent
 | Perintah | Fungsi |
 |---|---|
 | `wpicker login` | Pairing via PIN 6 digit → Application Password per perangkat |
-| `wpicker logout` / `whoami` | Hapus kredensial / lihat perangkat + site aktif |
+| `wpicker sites` (+ `login/stop/start/delete/use/link/unlink`), `whoami` | Daftar site + status + folder; site mana yang dipakai folder ini dan kenapa. `logout` kini alias tersembunyi `sites delete --local-only` |
 | `wpicker context [--save]` | Konteks site. `--save` → `./.wpicker/context.json` |
-| `wpicker init` | Buat `.wpicker/` + `.cursorrules` di folder kerja |
+| `wpicker connect [--agent …]` | Tulis instruksi untuk agent AI (skill `/wpicker` Claude Code, `AGENTS.md`, Cursor, Gemini, Copilot, Windsurf, Cline); `--refresh` menyegarkan yang sudah ada. Dipanggil otomatis oleh `install.sh`, `login`, dan `update`. `init` sudah dihapus. |
+| `wpicker guide` | Cetak panduan lengkap untuk agent |
 | `wpicker theme files` | Daftar file child theme di server |
 | `wpicker theme status` | Seperti `git status`: yang perlu di-push, yang bisa di-pull, konflik |
 | `wpicker theme diff [path...]` | Diff baris per baris lokal vs server (pakai `diff` sistem) |
@@ -302,7 +303,7 @@ Diuji terhadap database nyata: 15 query sah, 14 upaya bocor (tidak ada yang boco
 
 | File | Isi |
 |---|---|
-| `~/.wpicker/config.json` (0600) | site, username, application password (plaintext), device id/nama. **Satu site saja.** |
+| `~/.wpicker/sites.json` (0600; banyak site, id tetap, `default`) — `config.json` lama hanya dibaca dan diimpor sebagai site 1, tidak pernah ditulis, supaya binary lama di PATH tidak merusak store. Folder terhubung lewat `<folder>/.wpicker/project.json` (tanpa rahasia; dipilih berdasarkan URL). Urutan pemilihan: `--site` → `$WPICKER_SITE` → link folder → default; perintah yang mengubah site menolak jika hanya mengandalkan default saat ada >1 site. Lama: `~/.wpicker/config.json` (0600) | site, username, application password (plaintext), device id/nama. **Satu site saja.** |
 | `./.wpicker/last-pull.json` | base: hash tiap file saat terakhir di-pull/di-push |
 | `./.wpicker/base/` | isi tiap file pada saat itu (leluhur untuk merge) |
 | `./.wpicker/merge-backup/` | versi lokal sebelum sebuah merge |

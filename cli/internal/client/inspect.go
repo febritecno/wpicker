@@ -26,8 +26,8 @@ type LogsResponse struct {
 	Count   int        `json:"count"`
 	Total   int        `json:"total"`
 	Sources map[string]struct {
-		File  string `json:"file"`
-		Bytes int64  `json:"bytes"`
+		Bytes   int64 `json:"bytes"`
+		Skipped bool  `json:"skipped"`
 	} `json:"sources"`
 	DebugLogging bool `json:"debug_logging"`
 	WPDebug      bool `json:"wp_debug"`
