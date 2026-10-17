@@ -300,6 +300,12 @@ func linkFolder(dir string, site config.Site) error {
 		return err
 	}
 	return config.Update(func(s *config.Store) error {
+		// A folder belongs to one site at a time: moving it takes it off the previous one's list.
+		for i := range s.Sites {
+			if s.Sites[i].ID != site.ID {
+				s.Sites[i].RemoveFolder(abs)
+			}
+		}
 		if x := s.ByID(site.ID); x != nil {
 			x.AddFolder(abs)
 		}

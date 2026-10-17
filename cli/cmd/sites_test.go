@@ -850,3 +850,23 @@ func TestOfferLinkAfterLogin(t *testing.T) {
 		t.Fatal("the link was replaced")
 	}
 }
+
+func TestRelinkingAFolderMovesItBetweenSites(t *testing.T) {
+	_, work := fresh(t)
+	old := addSite(t, "https://old.example", "old")
+	neu := addSite(t, "https://new.example", "new")
+	if err := linkFolder(work, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := linkFolder(work, neu); err != nil { // the shop moved: point the folder at the new address
+		t.Fatal(err)
+	}
+	o, _ := pickSite("old")
+	n, _ := pickSite("new")
+	if len(o.Folders) != 0 || len(n.Folders) != 1 {
+		t.Fatalf("the folder is listed under both sites: old=%v new=%v", o.Folders, n.Folders)
+	}
+	if r, _ := resolveSite(work, false); r.Site.Name != "new" {
+		t.Fatalf("%+v", r)
+	}
+}
