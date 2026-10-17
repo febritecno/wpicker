@@ -4,7 +4,7 @@ Tags: ai, cli, deployment, child-theme, rollback, developer-tools
 Requires at least: 6.2
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -53,6 +53,14 @@ In `wp-content/uploads/wpicker-vault/<manifest-id>/`, protected from web access 
 
 == Changelog ==
 
+= 1.2.0 =
+Update the plugin and the CLI together. The CLI's `--site`, `logout` and `init` behave differently; see the release notes.
+
+* New: a self-check. `wpicker doctor` and WP-Admin's REST `/doctor` return a checklist of what could stop WPicker working on this site (PHP, HTTPS, Application Passwords, storage folder and whether the web server exposes it, disk space, child theme, the post-push health check, paired devices that have gone unused).
+* New (Diagnostics, still off by default): read WooCommerce and payment-gateway logs, a new `error` level (a declined card is not a crash), a map of what is installed (plugins, themes, drop-ins, WooCommerce gateways, email plugins) and an index of where functions, hooks, shortcodes and REST routes are defined.
+* Safer diagnostics: card numbers, payment keys, bearer tokens and similar are masked by their shape, not only by the name next to them, including in `print_r` / `var_export` dumps and in lines cut by the length limit. Log file names are never sent, and a refused path says why without revealing anything outside wp-content.
+* CLI: several sites on one computer (`wpicker sites`), folders that remember their site, `wpicker connect` for AI agents (Claude Code, OpenCode, Codex, Gemini CLI, Cursor, Copilot and more), and a safer `--site`.
+
 = 1.1.0 =
 Update the plugin and the CLI together: pairing and file transfer changed, and a 1.0.0 CLI cannot talk to this version.
 
@@ -70,6 +78,9 @@ Update the plugin and the CLI together: pairing and file transfer changed, and a
 * Initial public version.
 
 == Upgrade Notice ==
+
+= 1.2.0 =
+Adds a self-check (`wpicker doctor`), WooCommerce and payment log reading, and stronger masking of secrets in diagnostics. Update the wpicker CLI to 1.2.0 at the same time.
 
 = 1.1.0 =
 Fixes the REST API, which did not work in 1.0.0. Update the wpicker CLI to 1.1.0 at the same time.

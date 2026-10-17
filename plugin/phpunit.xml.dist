@@ -11,7 +11,7 @@
 		</testsuite>
 	</testsuites>
 	<php>
-		<const name="WPICKER_VERSION" value="1.1.0"/>
+		<const name="WPICKER_VERSION" value="1.2.0"/>
 		<const name="WPICKER_DIR" value="./"/>
 	</php>
 </phpunit>

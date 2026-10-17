@@ -43,7 +43,7 @@ func New(site, username, appPassword string, httpClient *http.Client) *Client {
 		Username:    username,
 		AppPassword: appPassword,
 		HTTP:        httpClient,
-		UserAgent:   "WPicker-CLI/1.1.0",
+		UserAgent:   "WPicker-CLI/1.2.0",
 	}
 }
 

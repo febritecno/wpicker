@@ -30,6 +30,20 @@ class WP_Theme_Mock {
 		$this->is_parent  = $is_parent;
 	}
 
+	/**
+	 * The real WP_Theme exposes `name` and `template` through __get(); code such as
+	 * Builder\Detector reads them as properties.
+	 */
+	public function __get( $name ) {
+		if ( 'template' === $name ) {
+			return $this->template;
+		}
+		if ( 'name' === $name ) {
+			return $this->get( 'Name' );
+		}
+		return null;
+	}
+
 	public function get_template() {
 		return $this->template;
 	}
