@@ -10,6 +10,7 @@ set -e
 # Usage: ./release.sh v1.1.0
 
 VERSION=$1
+REPO="febritecno/wpicker"
 
 if [ -z "$VERSION" ]; then
     echo "Error: You must provide a version tag (e.g., v1.1.0)"
@@ -91,10 +92,16 @@ git tag $VERSION || echo "Tag already exists, proceeding..."
 git push origin $VERSION || echo "Pushing tag failed, perhaps it already exists remotely."
 
 echo "   Uploading assets to GitHub Release..."
-gh release create "$VERSION" dist/* --title "WPicker $VERSION" --notes "Release $VERSION" --draft
+# --verify-tag refuses to create the release unless the tag already exists on GitHub: a release
+# bound to a placeholder ("untagged-...") tag makes `wpicker update` and the WordPress updater
+# compare against a version that is not one.
+gh release create "$VERSION" dist/* --title "WPicker $VERSION" --notes "Release $VERSION" --draft --verify-tag
 
 echo ""
 echo "========================================"
 echo "✓ Release Draft Created Successfully!"
 echo "========================================"
 echo "Go to your GitHub repository to review and publish the release."
+echo ""
+echo "After publishing, check what the updaters will see (must print $VERSION, not untagged-...):"
+echo "  curl -s https://api.github.com/repos/$REPO/releases/latest | grep '\"tag_name\"'"
