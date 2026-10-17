@@ -14,7 +14,6 @@ declare( strict_types = 1 );
 namespace WPicker\Admin;
 
 use WPicker\Auth\Capability;
-use WPicker\Auth\Pin;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -177,7 +176,6 @@ final class Dashboard {
 		$settings['allow_inspect'] = empty( $input['allow_inspect'] ) ? 0 : 1;
 		$settings['debug_log']     = empty( $input['debug_log'] ) ? 0 : 1;
 		$settings['vault_keep']   = max( 1, min( 200, (int) ( $input['vault_keep'] ?? 30 ) ) );
-		$settings['pin_ttl']      = max( 30, min( 900, (int) ( $input['pin_ttl'] ?? 120 ) ) );
 
 		return $settings;
 	}
@@ -257,9 +255,6 @@ final class Dashboard {
 	 * @return void
 	 */
 	public function render_devices(): void {
-		$user_id = get_current_user_id();
-		$pin     = ( new Pin() )->current( $user_id );
-
 		require WPICKER_DIR . 'admin/views/devices.php';
 	}
 
@@ -321,7 +316,6 @@ final class Dashboard {
 				'allow_inspect' => 0,
 				'debug_log'     => 0,
 				'vault_keep'   => 30,
-				'pin_ttl'      => 120,
 			)
 		);
 

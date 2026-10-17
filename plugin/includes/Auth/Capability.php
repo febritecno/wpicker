@@ -98,24 +98,4 @@ final class Capability {
 		return true;
 	}
 
-	/**
-	 * REST permission_callback for the PIN challenge endpoint.
-	 *
-	 * Issuing a PIN requires being able to log in as that user (basic auth
-	 * with username + the user's existing credentials, e.g. app password of
-	 * an admin). We require `edit_themes` for the target user so that only
-	 * eligible operators can mint a new device.
-	 *
-	 * @return bool|\WP_Error
-	 */
-	public function rest_challenge() {
-		if ( ! $this->can( self::SYNC_FILES ) ) {
-			return new \WP_Error(
-				'wpicker_rest_forbidden',
-				__( 'Insufficient permissions to issue a WPicker PIN.', 'wpicker' ),
-				array( 'status' => rest_authorization_required_code() )
-			);
-		}
-		return true;
-	}
 }

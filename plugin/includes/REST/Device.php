@@ -1,18 +1,17 @@
 <?php
 /**
- * REST Device controller — device registration & management.
+ * REST Device controller — pairing a device and managing paired ones.
  *
  * Routes:
- *   GET    /device/challenge   issue a PIN (rendered in admin for the user)
- *   POST   /device/register    verify PIN → mint Application Password
- *   GET    /device             list registered devices
- *   DELETE /device/(?P<id>...) revoke a device
+ *   POST   /device/start       ANONYMOUS. The CLI asks to pair; nothing is granted yet.
+ *   POST   /device/poll        ANONYMOUS. The CLI collects its credentials with its
+ *                              secret device_code, once a logged-in administrator has
+ *                              approved the request in WP-Admin (Admin\Approve).
+ *   GET    /device             list registered devices            (manage_options)
+ *   DELETE /device/(?P<id>...) revoke a device                    (manage_options)
  *
- * Authentication model:
- *   - challenge/register are reached with HTTP Basic (username) — the caller
- *     already proves they are that user via WP auth. The PIN additionally
- *     binds the registration to a human-in-the-loop confirmation.
- *   - list/revoke require manage_options.
+ * There is no password in this flow: the approval happens in a browser session that
+ * WordPress itself logged in (with whatever two-factor plugin the site uses).
  *
  * @package WPicker\REST
  */
@@ -25,7 +24,6 @@ use WPicker\Auth\Capability;
 use WPicker\Auth\DeviceFlow;
 use WPicker\Auth\PairRateLimit;
 use WPicker\Auth\WpdbRequestStore;
-use WPicker\Auth\Pin;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -52,12 +50,6 @@ final class Device extends Base {
 	 */
 	private $caps;
 
-	/**
-	 * PIN helper.
-	 *
-	 * @var Pin
-	 */
-	private $pins;
 
 	/**
 	 * Pairing requests from the CLI, approved in a browser.
@@ -73,25 +65,8 @@ final class Device extends Base {
 	 */
 	private $limit;
 
-	/**
-	 * True when the caller proved identity with username + password in the
-	 * request body (CLI pairing), rather than an existing session.
-	 *
-	 * @var bool
-	 */
-	private $via_credentials = false;
 
-	/**
-	 * Authorization decisions already made, keyed by request object id.
-	 *
-	 * @var array<int,bool|\WP_Error>
-	 */
-	private $decisions = array();
 
-	/**
-	 * Failed pairing attempts allowed per username + IP before lockout.
-	 */
-	private const MAX_ATTEMPTS = 5;
 
 	/**
 	 * Pairing requests one source may start in 15 minutes, polls it may make, and
@@ -102,10 +77,6 @@ final class Device extends Base {
 	private const MAX_POLLS  = 600;
 	private const MAX_MISSES = 20;
 
-	/**
-	 * Lockout window in seconds.
-	 */
-	private const LOCKOUT_TTL = 900;
 
 	/**
 	 * Constructor.
@@ -114,7 +85,6 @@ final class Device extends Base {
 	 */
 	public function __construct( Capability $caps ) {
 		$this->caps  = $caps;
-		$this->pins  = new Pin();
 		$this->flow  = new DeviceFlow( new WpdbRequestStore() );
 		$this->limit = new PairRateLimit();
 	}
@@ -126,29 +96,6 @@ final class Device extends Base {
 	 */
 	protected function routes(): array {
 		return array(
-			array(
-				'path'                => '/device/challenge',
-				'methods'             => 'GET',
-				'callback'            => array( $this, 'challenge' ),
-				'permission_callback' => array( $this, 'permission_challenge' ),
-			),
-			array(
-				// CLI pairing: username + password travel in the JSON body.
-				'path'                => '/device/challenge',
-				'methods'             => 'POST',
-				'callback'            => array( $this, 'challenge' ),
-				'permission_callback' => array( $this, 'permission_challenge' ),
-			),
-			array(
-				'path'                => '/device/register',
-				'methods'             => 'POST',
-				'callback'            => array( $this, 'register_device' ),
-				'permission_callback' => array( $this, 'permission_register' ),
-				'args'                => array(
-					'pin'         => array( 'type' => 'string', 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ),
-					'device_name' => array( 'type' => 'string', 'required' => false, 'default' => 'WPicker CLI', 'sanitize_callback' => 'sanitize_text_field' ),
-				),
-			),
 			array(
 				// CLI: ask to pair. ANONYMOUS on purpose; it only creates a pending
 				// request that a logged-in administrator must approve in a browser.
@@ -172,20 +119,6 @@ final class Device extends Base {
 				),
 			),
 			array(
-				// WP-Admin: is a pairing open right now, and has a device joined?
-				'path'                => '/device/pairing',
-				'methods'             => 'GET',
-				'callback'            => array( $this, 'pairing_status' ),
-				'permission_callback' => array( $this, 'permission_session' ),
-			),
-			array(
-				// WP-Admin: stop the open pairing by discarding its PIN.
-				'path'                => '/device/pairing',
-				'methods'             => 'DELETE',
-				'callback'            => array( $this, 'stop_pairing' ),
-				'permission_callback' => array( $this, 'permission_session' ),
-			),
-			array(
 				'path'                => '/device',
 				'methods'             => 'GET',
 				'callback'            => array( $this, 'list_devices' ),
@@ -204,201 +137,12 @@ final class Device extends Base {
 	}
 
 	/**
-	 * Permission for issuing a challenge.
-	 *
-	 * @param WP_REST_Request $request Request.
-	 * @return bool|\WP_Error
-	 */
-	public function permission_challenge( WP_REST_Request $request ) {
-		return $this->authorize( $request );
-	}
-
-	/**
-	 * Permission for registering a device. The PIN is checked separately.
-	 *
-	 * @param WP_REST_Request $request Request.
-	 * @return bool|\WP_Error
-	 */
-	public function permission_register( WP_REST_Request $request ) {
-		return $this->authorize( $request );
-	}
-
-	/**
-	 * Identify the caller for pairing.
-	 *
-	 * Two ways in:
-	 *   - an existing session (WP-Admin cookie + nonce, or an Application
-	 *     Password) that can edit themes;
-	 *   - `username` + `password` in the request body, verified here. Core's
-	 *     REST Basic auth only understands Application Passwords, which a
-	 *     first-time user does not have yet — pairing is how they get one.
-	 *
-	 * The password path is refused over plain HTTP outside local environments
-	 * and is rate limited per username + IP.
-	 *
-	 * @param WP_REST_Request $request Request.
-	 * @return bool|\WP_Error
-	 */
-	private function authorize( WP_REST_Request $request ) {
-		// Core calls permission callbacks more than once per request (dispatch,
-		// then again for every handler on the route to build the Allow
-		// header). Decide once, or one bad password counts as several.
-		$key = spl_object_id( $request );
-		if ( ! array_key_exists( $key, $this->decisions ) ) {
-			$this->decisions[ $key ] = $this->decide( $request );
-		}
-		return $this->decisions[ $key ];
-	}
-
-	/**
-	 * Uncached body of authorize().
-	 *
-	 * @param WP_REST_Request $request Request.
-	 * @return bool|\WP_Error
-	 */
-	private function decide( WP_REST_Request $request ) {
-		// A paired device (an Application Password) must not mint more devices: revoking a
-		// stolen token would otherwise not end access, because it could have made siblings.
-		if ( function_exists( 'rest_get_authenticated_app_password' ) && null !== rest_get_authenticated_app_password() ) {
-			return new \WP_Error(
-				'wpicker_forbidden_device',
-				__( 'A paired device cannot pair more devices. Do it in WP-Admin or from a computer you are logged in on.', 'wpicker' ),
-				array( 'status' => 403 )
-			);
-		}
-		if ( $this->caps->can( Capability::SYNC_FILES ) ) {
-			return true;
-		}
-
-		$username = trim( (string) $request->get_param( 'username' ) );
-		$password = (string) $request->get_param( 'password' );
-		if ( '' === $username || '' === $password ) {
-			return $this->caps->rest_challenge();
-		}
-
-		if ( ! is_ssl() && 'local' !== wp_get_environment_type() ) {
-			return new \WP_Error(
-				'wpicker_insecure_transport',
-				__( 'Pairing with a password requires HTTPS.', 'wpicker' ),
-				array( 'status' => 403 )
-			);
-		}
-
-		if ( $this->is_locked( $username ) ) {
-			return new \WP_Error(
-				'wpicker_locked',
-				__( 'Too many failed attempts. Try again in 15 minutes.', 'wpicker' ),
-				array( 'status' => 429 )
-			);
-		}
-
-		$user = wp_authenticate( $username, $password );
-		if ( is_wp_error( $user ) || ! user_can( $user, Capability::SYNC_FILES ) ) {
-			// One answer for "wrong password" and "not allowed": no user enumeration.
-			$this->record_failure( $username );
-			return new \WP_Error(
-				'wpicker_auth_failed',
-				__( 'Invalid credentials, or this user cannot edit themes.', 'wpicker' ),
-				array( 'status' => 401 )
-			);
-		}
-
-		wp_set_current_user( $user->ID );
-		$this->via_credentials = true;
-		return true;
-	}
-
-	/**
-	 * Transient key for the attempt counter of a username from this IP.
-	 *
-	 * @param string $username Submitted username.
-	 * @return string
-	 */
-	private function attempts_key( string $username ): string {
-		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : '';
-		return 'wpicker_fail_' . md5( strtolower( $username ) . '|' . $ip );
-	}
-
-	/**
-	 * Has this username + IP used up its attempts?
-	 *
-	 * @param string $username Submitted username.
-	 * @return bool
-	 */
-	private function is_locked( string $username ): bool {
-		return (int) get_transient( $this->attempts_key( $username ) ) >= self::MAX_ATTEMPTS;
-	}
-
-	/**
-	 * Count a failed password or PIN attempt.
-	 *
-	 * @param string $username Submitted username.
-	 * @return void
-	 */
-	private function record_failure( string $username ): void {
-		$key = $this->attempts_key( $username );
-		set_transient( $key, (int) get_transient( $key ) + 1, self::LOCKOUT_TTL );
-	}
-
-	/**
 	 * Permission for device management.
 	 *
 	 * @return bool|\WP_Error
 	 */
 	public function permission_manage() {
 		return $this->caps->rest_manage();
-	}
-
-	/**
-	 * GET|POST /device/challenge — issue a PIN for the current user.
-	 *
-	 * @return WP_REST_Response
-	 */
-	public function challenge(): WP_REST_Response {
-		$user_id = get_current_user_id();
-		$issued  = $this->pins->issue( $user_id );
-
-		$data = array(
-			'user_id'        => $user_id,
-			'expires_at_gmt' => $issued['expires_at_gmt'],
-			'ttl'            => $issued['ttl'],
-			'plugin_version' => WPICKER_VERSION,
-			'hint'           => 'Read the PIN in WP-Admin → WPicker → Devices and enter it into the CLI prompt.',
-		);
-
-		// The PIN is the second factor: it proves the caller can also see
-		// WP-Admin. Only an existing session gets it back in the response;
-		// a caller who merely knows the password has to go and read it.
-		if ( ! $this->via_credentials ) {
-			$data['pin'] = $issued['pin'];
-		}
-
-		return $this->nostore( $this->ok( $data ) );
-	}
-
-	/**
-	 * POST /device/register — verify PIN and mint an Application Password.
-	 *
-	 * @param WP_REST_Request $request Request.
-	 * @return WP_REST_Response
-	 */
-	public function register_device( WP_REST_Request $request ): WP_REST_Response {
-		$user_id = get_current_user_id();
-		$pin     = (string) $request->get_param( 'pin' );
-		$name    = (string) $request->get_param( 'device_name' );
-
-		if ( ! $this->pins->verify( $user_id, $pin ) ) {
-			if ( $this->via_credentials ) {
-				$this->record_failure( trim( (string) $request->get_param( 'username' ) ) );
-			}
-			return $this->nostore( $this->fail( 'wpicker_pin_invalid', 'PIN is invalid, expired, or already used.', 401 ) );
-		}
-
-		$minted = $this->mint_device( $user_id, $name, 'password', PairRateLimit::client_ip() );
-		if ( is_wp_error( $minted ) ) {
-			return $this->nostore( $this->fail( $minted->get_error_code(), $minted->get_error_message(), 500 ) );
-		}
-		return $this->nostore( $this->ok( $minted, 201 ) );
 	}
 
 	/**
@@ -593,82 +337,6 @@ final class Device extends Base {
 		);
 		// phpcs:ignore WordPress.WP.AlternativeFunctions
 		@wp_mail( $user->user_email, sprintf( __( '[%s] A device was paired with WPicker', 'wpicker' ), $site ), $body );
-	}
-
-	/**
-	 * Permission for the pairing controls in WP-Admin: an existing session
-	 * that may pair devices. Username + password in the body does not count —
-	 * that caller must not be able to read the PIN it is supposed to be shown.
-	 *
-	 * @return bool|\WP_Error
-	 */
-	public function permission_session() {
-		if ( function_exists( 'rest_get_authenticated_app_password' ) && null !== rest_get_authenticated_app_password() ) {
-			return new \WP_Error(
-				'wpicker_forbidden_device',
-				__( 'A paired device cannot read or change pairing. Use WP-Admin.', 'wpicker' ),
-				array( 'status' => 403 )
-			);
-		}
-		return $this->caps->rest_challenge();
-	}
-
-	/**
-	 * GET /device/pairing — the current user's open pairing, if any.
-	 *
-	 * Lets the Devices screen show a PIN the CLI just asked for, count it
-	 * down, and notice when a device used it.
-	 *
-	 * @return WP_REST_Response
-	 */
-	public function pairing_status(): WP_REST_Response {
-		$user_id = get_current_user_id();
-		$current = $this->pins->current( $user_id );
-		$mine    = 0;
-		foreach ( $this->all_devices() as $device ) {
-			if ( (int) ( $device['user_id'] ?? 0 ) === $user_id ) {
-				++$mine;
-			}
-		}
-
-		$recent = null;
-		foreach ( $this->all_devices() as $device ) {
-			$made = isset( $device['created_at_gmt'] ) ? strtotime( (string) $device['created_at_gmt'] ) : false;
-			if ( (int) ( $device['user_id'] ?? 0 ) === $user_id && false !== $made && time() - $made < 600 ) {
-				if ( null === $recent || $made > strtotime( (string) $recent['created_at_gmt'] ) ) {
-					$recent = $device;
-				}
-			}
-		}
-
-		$data = array(
-			'active'       => null !== $current,
-			'device_count' => $mine,
-			'last_paired'  => null === $recent ? null : array(
-				'id'             => (string) ( $recent['id'] ?? '' ),
-				'name'           => (string) ( $recent['name'] ?? '' ),
-				'method'         => (string) ( $recent['method'] ?? '' ),
-				'paired_from'    => (string) ( $recent['paired_from'] ?? '' ),
-				'created_at_gmt' => (string) ( $recent['created_at_gmt'] ?? '' ),
-			),
-		);
-
-		if ( null !== $current ) {
-			$data['pin']        = $current['pin'];
-			$data['expires_in'] = max( 0, strtotime( $current['expires_at_gmt'] ) - time() );
-		}
-		return $this->ok( $data );
-	}
-
-	/**
-	 * DELETE /device/pairing — discard the current user's PIN, so a pairing
-	 * that was started (here or by the CLI) can no longer be completed.
-	 *
-	 * @return WP_REST_Response
-	 */
-	public function stop_pairing(): WP_REST_Response {
-		$this->pins->clear( get_current_user_id() );
-		return $this->ok( array( 'active' => false ) );
 	}
 
 	/**

@@ -1307,16 +1307,6 @@ body.wpicker-modal-open {
 	user-select: all;
 }
 
-.wpicker-admin .wpicker-advanced {
-	max-width: 720px;
-	margin: 0 0 16px;
-}
-
-.wpicker-admin .wpicker-advanced > summary {
-	cursor: pointer;
-	color: var(--wpk-ink-soft);
-	margin-bottom: 8px;
-}
 
 .wpicker-admin .wpicker-approve-lead {
 	margin: 0;
@@ -1378,46 +1368,6 @@ body.wpicker-modal-open {
 	padding: 10px 14px;
 	background: #fff8e5;
 	border-left: 4px solid #dba617;
-}
-
-/* ---- Pairing PIN ------------------------------------------------------- */
-
-.wpicker-admin .wpicker-pin-card {
-	max-width: 520px;
-}
-
-.wpicker-admin .wpicker-pin-display {
-	margin-top: 12px;
-	padding: 16px;
-	text-align: center;
-	background: var(--wpk-canvas);
-	border: 1px dashed #c3c8d0;
-	border-radius: 8px;
-}
-
-.wpicker-admin .wpicker-pin-code {
-	font-family: var(--wpk-mono);
-	font-size: 2.4em;
-	font-weight: 700;
-	letter-spacing: 0.35em;
-}
-
-.wpicker-admin .wpicker-pin-actions {
-	display: flex;
-	gap: 8px;
-	margin: 12px 0 8px;
-}
-
-.wpicker-admin .wpicker-pin-message {
-	min-height: 1.5em;
-	margin: 10px 0 0;
-	color: var(--wpk-ink-soft);
-}
-
-.wpicker-admin .wpicker-pin-expires {
-	margin-top: 6px;
-	font-size: 12px;
-	color: var(--wpk-ink-soft);
 }
 
 @media (max-width: 900px) {

@@ -81,8 +81,6 @@ function wpicker_activate(): void {
 		$defaults,
 		array(
 			'vault_keep'      => 30,     // snapshots to retain
-			'pin_ttl'         => 120,    // seconds
-			'pin_length'      => 6,
 			'lint_enabled'    => 1,
 		)
 	);

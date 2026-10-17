@@ -305,7 +305,7 @@ request in your browser. The address is known, so nothing is asked for.`,
 		if err != nil {
 			return err
 		}
-		return runLogin(cmd, loginOpts{Site: s.URL, Fixed: true, Username: s.Username, Name: s.Name, Device: loginDevice, Password: loginPassword, NoBrowser: loginNoBrowser})
+		return runLogin(cmd, loginOpts{Site: s.URL, Fixed: true, Name: s.Name, Device: loginDevice, NoBrowser: loginNoBrowser})
 	},
 }
 

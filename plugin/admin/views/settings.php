@@ -136,11 +136,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<input type="number" id="wpicker-vault-keep" name="wpicker_settings[vault_keep]" min="1" max="200" value="<?php echo esc_attr( (string) (int) $settings['vault_keep'] ); ?>">
 				<span class="wpicker-muted"><?php esc_html_e( 'Older ones are deleted. Failed pushes and pushes waiting for review are always kept.', 'wpicker' ); ?></span>
 			</p>
-
-			<p class="wpicker-field">
-				<label for="wpicker-pin-ttl"><?php esc_html_e( 'Pairing PIN lifetime (seconds)', 'wpicker' ); ?></label>
-				<input type="number" id="wpicker-pin-ttl" name="wpicker_settings[pin_ttl]" min="30" max="900" value="<?php echo esc_attr( (string) (int) $settings['pin_ttl'] ); ?>">
-			</p>
 		</section>
 
 		<?php submit_button( __( 'Save settings', 'wpicker' ) ); ?>

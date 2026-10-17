@@ -11,11 +11,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"wpicker/internal/config"
 )
 
 func resetLogin() {
-	loginName, loginDevice, loginPassword, loginNoBrowser = "", "", false, false
+	loginName, loginDevice, loginNoBrowser = "", "", false
 }
 
 // stdin replaces standard input for one test with the given content.
@@ -221,5 +223,16 @@ func TestTheBrowserIsNeverOpenedForAScript(t *testing.T) {
 	out := capture(t, func() { loginCmd.RunE(loginCmd, []string{srv.URL}) })
 	if strings.Contains(out, "opened in your browser") {
 		t.Fatal("the browser was opened for a non-interactive run")
+	}
+}
+
+func TestThePasswordAndPinPairingIsGone(t *testing.T) {
+	for name, cmd := range map[string]*cobra.Command{"login": loginCmd, "sites login": sitesLoginCmd} {
+		if cmd.Flags().Lookup("password") != nil {
+			t.Errorf("%s still has --password", name)
+		}
+	}
+	if strings.Contains(loginCmd.Long, "--password") || strings.Contains(loginCmd.Long, "PIN") {
+		t.Error("the login help still describes the PIN pairing")
 	}
 }

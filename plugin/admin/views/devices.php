@@ -16,7 +16,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /** @var \WPicker\Admin\Dashboard $this */
-$pin     = $pin ?? null;
 $devices = get_option( 'wpicker_devices', array() );
 $devices = is_array( $devices ) ? $devices : array();
 
@@ -56,39 +55,6 @@ foreach ( $devices as $d ) {
 		<p class="wpicker-muted"><?php esc_html_e( 'If you did not just run that command, do not approve a request you are shown.', 'wpicker' ); ?></p>
 	</div>
 
-	<details class="wpicker-advanced" id="wpicker-pin-details" <?php echo ( $pin && strtotime( $pin['expires_at_gmt'] ) > time() ) ? 'open' : ''; ?>>
-		<summary><?php esc_html_e( 'Pair with a password and a PIN instead (older CLI, or no pairing codes)', 'wpicker' ); ?></summary>
-	<?php $pin_left = $pin ? max( 0, strtotime( $pin['expires_at_gmt'] ) - time() ) : 0; ?>
-	<div class="wpicker-card wpicker-pin-card" id="wpicker-pin-card" data-expires-in="<?php echo esc_attr( (string) $pin_left ); ?>">
-		<h2 class="title"><?php esc_html_e( 'Pair a new device', 'wpicker' ); ?></h2>
-		<p>
-			<?php esc_html_e( 'On the device, run', 'wpicker' ); ?> <code>wpicker login &lt;site&gt; --password</code>
-			<?php esc_html_e( 'and enter the PIN shown here when it asks.', 'wpicker' ); ?>
-		</p>
-
-		<div id="wpicker-pin-idle" <?php echo $pin_left > 0 ? 'hidden' : ''; ?>>
-			<button type="button" class="button button-primary" id="wpicker-generate-pin">
-				<?php esc_html_e( 'Generate PIN', 'wpicker' ); ?>
-			</button>
-			<p class="wpicker-pin-message" id="wpicker-pin-message" role="status"></p>
-		</div>
-
-		<div id="wpicker-pin-active" <?php echo $pin_left > 0 ? '' : 'hidden'; ?>>
-			<div class="wpicker-pin-display">
-				<div class="wpicker-pin-code" id="wpicker-pin-code"><?php echo $pin_left > 0 ? esc_html( $pin['pin'] ) : ''; ?></div>
-				<div class="wpicker-pin-expires">
-					<?php esc_html_e( 'Expires in', 'wpicker' ); ?> <strong id="wpicker-pin-countdown"><?php echo esc_html( (string) $pin_left ); ?></strong>s
-				</div>
-			</div>
-			<p class="wpicker-pin-actions">
-				<button type="button" class="button" id="wpicker-regenerate-pin"><?php esc_html_e( 'Regenerate', 'wpicker' ); ?></button>
-				<button type="button" class="button wpicker-danger" id="wpicker-stop-pairing"><?php esc_html_e( 'Stop pairing', 'wpicker' ); ?></button>
-			</p>
-			<p class="wpicker-muted"><?php esc_html_e( 'Pairing is open until the PIN is used, expires, or you stop it. Regenerating makes the old PIN useless.', 'wpicker' ); ?></p>
-		</div>
-	</div>
-
-	</details>
 
 	<h2 class="wpicker-section-title"><?php esc_html_e( 'Registered devices', 'wpicker' ); ?></h2>
 	<div class="wpicker-panel">

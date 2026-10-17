@@ -55,56 +55,6 @@ func (c *Client) GetContext(ctx context.Context) (*ContextResponse, error) {
 
 // --- Device ---------------------------------------------------------------
 
-// ChallengeResponse mirrors POST /device/challenge. PIN is empty for
-// password-authenticated callers (the CLI): it is the second factor and has
-// to be read in WP-Admin.
-type ChallengeResponse struct {
-	UserID        int    `json:"user_id"`
-	PIN           string `json:"pin"`
-	ExpiresAt     string `json:"expires_at_gmt"`
-	PluginVersion string `json:"plugin_version"`
-	TTL           int    `json:"ttl"`
-	Hint          string `json:"hint"`
-}
-
-// Challenge requests a new pairing PIN.
-func (c *Client) Challenge(ctx context.Context, username, password string) (*ChallengeResponse, int, error) {
-	body := map[string]string{"username": username, "password": password}
-	raw, status, err := c.DoRaw(ctx, "POST", "/device/challenge", body)
-	if err != nil {
-		return nil, status, err
-	}
-	return decodeEnvelope[ChallengeResponse](raw, status)
-}
-
-// RegisterRequest is the body of POST /device/register.
-type RegisterRequest struct {
-	Username   string `json:"username"`
-	Password   string `json:"password"`
-	PIN        string `json:"pin"`
-	DeviceName string `json:"device_name"`
-}
-
-// RegisterResponse mirrors POST /device/register.
-type RegisterResponse struct {
-	UserID      int    `json:"user_id"`
-	DeviceID    string `json:"device_id"`
-	AppPassword string `json:"app_password"`
-	DeviceName  string `json:"device_name"`
-	Note        string `json:"note"`
-}
-
-// Register validates a PIN and mints an Application Password.
-func (c *Client) Register(ctx context.Context, username, password string, body RegisterRequest) (*RegisterResponse, int, error) {
-	body.Username = username
-	body.Password = password
-	raw, status, err := c.DoRaw(ctx, "POST", "/device/register", body)
-	if err != nil {
-		return nil, status, err
-	}
-	return decodeEnvelope[RegisterResponse](raw, status)
-}
-
 // DeviceRecord is a single registered device.
 type DeviceRecord struct {
 	ID          string `json:"id"`

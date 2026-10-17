@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -348,7 +349,7 @@ func TestAnOldPluginGetsTheFallbackHint(t *testing.T) {
 	}))
 	defer srv.Close()
 	_, err := DeviceLogin(context.Background(), DeviceOptions{Site: srv.URL, CLIVersion: "1.3.0"}, strings.NewReader(""), io.Discard)
-	if err == nil || !strings.Contains(err.Error(), "older than 1.3.0") || !strings.Contains(err.Error(), "--password") {
+	if err == nil || !strings.Contains(err.Error(), "older than 1.3.0") || !strings.Contains(err.Error(), "Update or activate the plugin") {
 		t.Fatalf("%v", err)
 	}
 }
@@ -559,6 +560,22 @@ func TestSlowDownAndBusyCannotStretchTheWaitWithoutLimit(t *testing.T) {
 	for _, w := range ck.waits {
 		if w > maxInterval {
 			t.Fatalf("waited %v, more than the %v ceiling", w, maxInterval)
+		}
+	}
+}
+
+func TestNoMessageSendsAnyoneBackToTheRemovedPasswordPairing(t *testing.T) {
+	src, err := os.ReadFile("device.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(src), "--password") {
+		t.Fatal("device.go still suggests --password, which no longer exists")
+	}
+	old, _ := os.ReadFile("auth.go")
+	for _, gone := range []string{"readPassword", "Challenge", "Register(", "Prefill", "func Login"} {
+		if strings.Contains(string(old), gone) {
+			t.Errorf("auth.go still holds %q from the password + PIN pairing", gone)
 		}
 	}
 }

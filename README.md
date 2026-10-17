@@ -22,9 +22,9 @@ It has two halves:
 
 ## Preview
 
-| Pair a device with a one-time PIN | Every push is a snapshot you can inspect, revert or restore |
+| Pair a device by approving it in the browser | Every push is a snapshot you can inspect, revert or restore |
 |:---:|:---:|
-| [![Devices: pairing PIN and registered devices](screenshots/devices.png)](screenshots/devices.png) | [![Snapshots: search, filters, status and per-push actions](screenshots/snapshots.png)](screenshots/snapshots.png) |
+| [![Devices: how to pair, and registered devices](screenshots/devices.png)](screenshots/devices.png) | [![Snapshots: search, filters, status and per-push actions](screenshots/snapshots.png)](screenshots/snapshots.png) |
 | **Full-site backup and restore, or restore from a file** | **Direct or review-first pushes, safety checks, limits** |
 | [![Backup & Restore: create, upload, restore, download](screenshots/backup-restore.png)](screenshots/backup-restore.png) | [![Settings: push mode, safety checks, backups, limits](screenshots/settings.png)](screenshots/settings.png) |
 | **Scan installed plugins for known vulnerabilities** | |
@@ -105,7 +105,7 @@ wpicker login https://your-site.com
 It prints a link and opens it in your browser. There you log in to WordPress as you always do (so your password and any two-factor plugin apply), see **which site and which device** are asking, check that the code matches the one in your terminal, and press **Approve**. The terminal then finishes by itself. Nothing is typed into it, and your password never reaches the CLI.
 
 - Only approve a request you started yourself, a moment ago, on your own computer. Never approve a link somebody sent you. When the request came from a different network than your browser (for example, you ran the command on a server over SSH), WP-Admin makes you type the code from that terminal before it lets you approve.
-- Add `--no-browser` to only print the link. `--password` pairs the old way (admin password and a PIN from WP-Admin), for a plugin older than 1.3.0.
+- Add `--no-browser` to only print the link. The plugin must be 1.3.0 or newer; the older pairing with an admin password and a PIN has been removed, so update the plugin and the CLI together.
 - **Behind a proxy or CDN** (Cloudflare, a load balancer, some managed hosts): WordPress then sees every visitor as one address, so WPicker cannot tell whether the request came from your network, and always asks you to type the code. `wpicker doctor` says when this applies. If your proxy sets the real address in a header and strips it from outside requests, tell WPicker: `add_filter( 'wpicker_client_ip', fn() => $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] );`
 - Typing the code is a speed bump against someone who sends you a link, not a wall: a determined phisher can simply tell you the code. Do not approve requests you did not start.
 - Approving needs the `edit_themes` capability (on multisite: a super administrator). On a site that sets `DISALLOW_FILE_EDIT`, WordPress removes that capability from everyone, and no pairing method of WPicker works until it is lifted.

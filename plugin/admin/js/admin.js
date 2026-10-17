@@ -2,7 +2,7 @@
  * WPicker admin client.
  *
  * Talks to the wpicker/v1 REST endpoints using the WP REST nonce + cookie auth.
- * Handles: PIN generation, device revocation, and the Snapshots screen
+ * Handles: device revocation, and the Snapshots screen
  * (search, filters, pagination, and the detail dialog with its diff viewer,
  * restore, and apply / reject of held pushes).
  */
@@ -36,136 +36,6 @@
 			json = { ok: false, error: { code: 'parse', message: 'Bad JSON response.' } };
 		}
 		return { status: res.status, body: json };
-	}
-
-	// --- Pair a new device -------------------------------------------------
-	//
-	// A pairing is "open" while the user has an unused, unexpired PIN — whether
-	// it was generated here or requested by `wpicker login`. The card follows
-	// the server's view of it (polled), so it shows a PIN the CLI asked for,
-	// and notices when a device used it.
-	var pinCard = document.getElementById( 'wpicker-pin-card' );
-	if ( pinCard ) {
-		initPairing( pinCard );
-	}
-
-	function initPairing( card ) {
-		var idle = document.getElementById( 'wpicker-pin-idle' );
-		var active = document.getElementById( 'wpicker-pin-active' );
-		var code = document.getElementById( 'wpicker-pin-code' );
-		var countdown = document.getElementById( 'wpicker-pin-countdown' );
-		var message = document.getElementById( 'wpicker-pin-message' );
-		var generate = document.getElementById( 'wpicker-generate-pin' );
-		var regenerate = document.getElementById( 'wpicker-regenerate-pin' );
-		var stop = document.getElementById( 'wpicker-stop-pairing' );
-		var POLL_MS = 3000;
-		var expiresAt = 0;
-		var devices = null; // device count when the pairing was first seen
-		var busy = false;
-
-		function show( pin, expiresIn ) {
-			var details = document.getElementById( 'wpicker-pin-details' );
-			if ( details ) {
-				details.open = true; // a PIN the CLI asked for must be visible
-			}
-			code.textContent = pin;
-			expiresAt = Date.now() + expiresIn * 1000;
-			countdown.textContent = Math.max( 0, Math.round( expiresIn ) );
-			message.textContent = '';
-			idle.hidden = true;
-			active.hidden = false;
-		}
-
-		function close( text ) {
-			expiresAt = 0;
-			code.textContent = '';
-			message.textContent = text || '';
-			active.hidden = true;
-			idle.hidden = false;
-		}
-
-		// Issue a fresh PIN; any previous one stops working.
-		async function issue( button ) {
-			if ( busy ) {
-				return;
-			}
-			busy = true;
-			button.disabled = true;
-			var r = await api( 'GET', '/device/challenge' );
-			button.disabled = false;
-			busy = false;
-			if ( r.body && r.body.ok && r.body.data.pin ) {
-				show( r.body.data.pin, r.body.data.ttl );
-			} else {
-				close( ( r.body && r.body.error && r.body.error.message ) || 'Could not generate a PIN.' );
-			}
-		}
-
-		generate.addEventListener( 'click', function () {
-			issue( generate );
-		} );
-		regenerate.addEventListener( 'click', function () {
-			issue( regenerate );
-		} );
-		stop.addEventListener( 'click', async function () {
-			if ( busy ) {
-				return;
-			}
-			busy = true;
-			stop.disabled = true;
-			var r = await api( 'DELETE', '/device/pairing' );
-			stop.disabled = false;
-			busy = false;
-			if ( r.body && r.body.ok ) {
-				close( 'Pairing stopped. The PIN no longer works.' );
-			} else {
-				message.textContent = 'Could not stop pairing — the PIN may still be valid.';
-			}
-		} );
-
-		// Local countdown between polls.
-		setInterval( function () {
-			if ( ! expiresAt ) {
-				return;
-			}
-			var left = Math.round( ( expiresAt - Date.now() ) / 1000 );
-			countdown.textContent = Math.max( 0, left );
-			if ( left <= 0 ) {
-				close( 'The PIN expired. Generate a new one to pair.' );
-			}
-		}, 1000 );
-
-		async function poll() {
-			if ( busy || document.hidden ) {
-				return;
-			}
-			var r = await api( 'GET', '/device/pairing' );
-			if ( busy || ! ( r.body && r.body.ok ) ) {
-				return;
-			}
-			var d = r.body.data;
-			if ( devices === null ) {
-				devices = d.device_count;
-			}
-			if ( d.device_count > devices ) {
-				close( 'Device paired.' );
-				window.location.reload();
-				return;
-			}
-			if ( d.active ) {
-				// Also picks up a PIN that `wpicker login` requested.
-				show( d.pin, d.expires_in );
-			} else if ( expiresAt ) {
-				close( 'Pairing closed.' );
-			}
-		}
-
-		var initial = parseInt( card.getAttribute( 'data-expires-in' ), 10 ) || 0;
-		if ( initial > 0 ) {
-			expiresAt = Date.now() + initial * 1000;
-		}
-		poll();
-		setInterval( poll, POLL_MS );
 	}
 
 	// --- "A device just paired — not you? Revoke it" -------------------------

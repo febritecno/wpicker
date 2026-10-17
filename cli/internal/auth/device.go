@@ -211,7 +211,7 @@ func checkLink(link, site string) error {
 	}
 	if !strings.EqualFold(l.Host, s.Host) {
 		return fmt.Errorf("refusing to continue: the site at %s returned a link to a different address (%s), where you would be asked to log in.\n"+
-			"  If the site's WordPress address differs from the one you typed, pair with its real address, or use: wpicker login %s --password", s.Host, l.Host, site)
+			"  If the site's WordPress address differs from the one you typed, run wpicker login with its real address.", s.Host, l.Host)
 	}
 	if s.Scheme == "https" && l.Scheme != "https" {
 		return fmt.Errorf("refusing to continue: the link %s is not https although %s is", link, site)
@@ -226,8 +226,7 @@ func explainStartError(err error, site string) error {
 	switch {
 	case errors.Is(err, client.ErrNoDeviceFlow):
 		return fmt.Errorf("%s cannot pair through the browser: its WPicker plugin is older than 1.3.0, or not active.\n"+
-			"  Update or activate the plugin in WP-Admin → Plugins, or pair with the admin password and a PIN instead:\n"+
-			"    wpicker login %s --password", site, site)
+			"  Update or activate the plugin in WP-Admin → Plugins, then run the command again.", site)
 	case errors.As(err, &redirect):
 		return fmt.Errorf("%s redirects elsewhere (%s). A redirected request loses its data, so use that address directly:\n"+
 			"    wpicker login %s", site, cleanText(redirect.Location, 200), cleanText(strings.TrimRight(redirect.Location, "/"), 200))

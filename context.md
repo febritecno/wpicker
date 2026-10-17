@@ -31,7 +31,7 @@ Versi di kode: **1.0.0** (`plugin/wpicker.php`, `cli/cmd/root.go`). Tag git: `v1
 cli/
   main.go
   cmd/                 perintah cobra: login, context, theme, history, rollback, page, scan, device, init, update
-  internal/auth/       login: persetujuan di browser (device flow), password+PIN (--password), batas otomatis
+  internal/auth/       login: persetujuan di browser (device flow, RFC 8628); password + PIN sudah dihapus
   internal/client/     HTTP client + method per endpoint (api.go)
   internal/config/     ~/.wpicker/sites.json (multi-site, flock) + config.json lama (hanya dibaca/diimpor)
   internal/sync/       walk, sha256, diff, tulis atomik, manifest lokal
@@ -65,7 +65,7 @@ Flag global: `--site <url>` (override site), `--json` (output mesin, untuk agent
 
 | Perintah | Fungsi |
 |---|---|
-| `wpicker login [alamat]` | Device flow (RFC 8628): CLI minta pairing → cetak tautan + kode → admin login di wp-admin (password + 2FA berlaku), cocokkan kode, **Approve** → CLI polling dan menerima Application Password sekali. `--no-browser`, `--password` (cara lama: password + PIN). |
+| `wpicker login [alamat]` | Device flow (RFC 8628): CLI minta pairing → cetak tautan + kode → admin login di wp-admin (password + 2FA berlaku), cocokkan kode, **Approve** → CLI polling dan menerima Application Password sekali. `--no-browser`. Password + PIN **dihapus**; butuh plugin ≥ 1.3.0. |
 | `wpicker sites` (+ `login/stop/start/delete/use/link/unlink`), `whoami` | Daftar site + status + folder; site mana yang dipakai folder ini dan kenapa. `logout` kini alias tersembunyi `sites delete --local-only` |
 | `wpicker context [--save]` | Konteks site. `--save` → `./.wpicker/context.json` |
 | `wpicker connect [agent…]` | Hubungkan agent AI / adapter ke WPicker. **Global adalah bawaan** (semua agent yang terpasang); `--project` untuk satu proyek; agent yang hanya punya aturan per proyek (cursor, copilot, windsurf, cline, roo, zed, kiro) ditulis ke proyek saat disebut namanya. `connect list`, `connect remove <agent>`, `--refresh`. Adapter buatan sendiri: JSON di `~/.wpicker/adapters/` (tidak pernah dibaca dari proyek). Dipanggil otomatis oleh `install.sh`, `login`, `update`. |
@@ -103,9 +103,6 @@ Namespace: `/wp-json/wpicker/v1`. Auth: Basic dengan Application Password (kecua
 | POST | `/device/challenge` | username + password di body |
 | POST | `/device/start` | **anonim** — buka permintaan pairing; balikan `device_code` (rahasia CLI, hanya HMAC-nya disimpan), `user_code`, `verification_url` |
 | POST | `/device/poll` | **anonim** — `device_code`; `authorization_pending` / `slow_down` / `access_denied` / `expired_token` / sukses (sekali) |
-| POST | `/device/register` | (jalur lama) username + password di body, + PIN |
-| GET | `/device/pairing` | `edit_themes` (sesi) — status pairing + PIN yang sedang aktif |
-| DELETE | `/device/pairing` | `edit_themes` (sesi) — hentikan pairing, PIN dibuang |
 | GET | `/device` | `manage_options` |
 | DELETE | `/device/{id}` | `manage_options` |
 | GET | `/theme/files` | `edit_themes` |
@@ -171,9 +168,9 @@ Health check: `includes/Health/Probe.php`. Matikan lewat `wpicker_settings['heal
 
 **Vault:** di dalam direktori uploads, dilindungi `.htaccess`. Simpan 30 snapshot terakhir (`vault_keep`). Rollback bikin snapshot pengaman dulu (`rollback_safety`), lalu theme dijadikan salinan persis snapshot (file yang tidak ada di snapshot dihapus).
 
-**Login:** CLI kirim username + password admin di body `POST /device/challenge` → server verifikasi (`wp_authenticate`) → PIN 6 digit dibuat, **tidak** dikirim balik ke CLI; user baca di WP-Admin → WPicker → `POST /device/register` + PIN → Application Password per perangkat. Password hanya diterima lewat HTTPS atau `WP_ENVIRONMENT_TYPE=local`. 5× gagal (password atau PIN) per username + IP → kunci 15 menit (429). PIN berlaku `pin_ttl` detik (default 120), sekali pakai.
+**Login:** lihat "Pairing lewat browser" di bawah. Jalur lama (username + password di body, PIN 6 digit, `/device/challenge`, `/device/register`, `/device/pairing`, kelas `Pin`, pengaturan `pin_ttl`) sudah dihapus.
 
-Kartu **Pair a new device** (WP-Admin → Devices) mengikuti status server lewat polling 3 detik: menampilkan PIN yang dibuat di halaman maupun yang diminta `wpicker login`, hitung mundur, **Regenerate** (PIN lama mati), **Stop pairing** (PIN dibuang), dan reload sendiri saat device berhasil masuk. PIN tidak lagi diperbarui otomatis saat habis.
+Kartu **Pair a device** (WP-Admin → Devices) hanya menjelaskan perintahnya; persetujuan terjadi di halaman `wpicker-approve`. Notifikasi "A device just paired" + tombol Revoke tampil dari server saat halaman dimuat.
 
 ## Mode push dan review
 
@@ -314,7 +311,7 @@ Diuji terhadap database nyata: 15 query sah, 14 upaya bocor (tidak ada yang boco
 
 ## Alur kerja agent
 
-1. `wpicker login` → PIN dari menu **WPicker** di WP-Admin.
+1. `wpicker login <alamat>` → buka tautan yang dicetak, login, **Approve**.
 2. `wpicker context` → pahami tema, plugin, builder.
 3. `wpicker theme status` lalu `wpicker theme pull` → sebelum edit.
 4. Edit lokal.
@@ -383,7 +380,7 @@ Belum diperbaiki:
 
 - **Updater didaftarkan di dalam `rest_api_init`** → hook update plugin tidak pernah terpasang di halaman admin biasa.
 - Password tidak disembunyikan saat diketik di `wpicker login`.
-- Halaman Devices: tombol "Generate PIN" menimpa PIN yang sudah diminta CLI (tetap berfungsi, user baca PIN baru).
+- (dihapus) Tombol "Generate PIN" di Devices.
 
 ## Kekurangan terhadap masalah inti
 

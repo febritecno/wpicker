@@ -15,13 +15,13 @@ A bridge between local AI agents and WordPress. Exposes AI-friendly site context
 WPicker turns WordPress into an AI-native development environment.
 
 * **The Eyes (this plugin)** — exposes site metadata, manages devices, and runs the Deployment Vault (atomic snapshots + rollback). Enforces an auto `php -l` lint gate on every push.
-* **The Hands (companion CLI)** — a Go binary (`wpicker`) that authenticates via PIN + Application Passwords, then pulls/pushes child-theme files and rolls back.
+* **The Hands (companion CLI)** — a Go binary (`wpicker`) that is approved in your browser and then uses Application Passwords, then pulls/pushes child-theme files and rolls back.
 
 See the repository README for the full PRD and CLI commands.
 
 = Key features =
 
-* Secure device pairing via 6-digit PIN + WordPress Application Passwords.
+* Secure device pairing: the CLI shows a link, you log in to WordPress and approve it in your browser (your password and any two-factor plugin apply), and it receives a revocable WordPress Application Password.
 * Global Context API (`GET /wp-json/wpicker/v1/context`) returning WP/PHP/plugin/theme versions and theme_mods as JSON — to ground AI agents and reduce hallucination.
 * Child-theme file sync confined by `realpath()` checks; no writes outside the child theme.
 * **Deployment Vault**: every push snapshots the child theme first; restore any prior state in milliseconds.
@@ -38,7 +38,7 @@ See the repository README for the full PRD and CLI commands.
 1. Upload the `wpicker` folder to `/wp-content/plugins/`.
 2. Activate **WPicker** via the Plugins screen.
 3. Make sure Application Passwords are enabled (they are by default on SSL sites).
-4. Go to **WPicker → Devices** to generate a pairing PIN, or pair from the CLI with `wpicker login`.
+4. On your computer run `wpicker login https://your-site.com`, open the link it prints, and approve the request in your browser.
 
 == Frequently Asked Questions ==
 

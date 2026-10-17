@@ -20,7 +20,6 @@ import (
 var (
 	loginName      string
 	loginDevice    string
-	loginPassword  bool
 	loginNoBrowser bool
 )
 
@@ -46,25 +45,17 @@ and your password never reaches this program.
 Only approve a request you started yourself, a moment ago, on your own computer.
 Never approve a link somebody sent you.
 
-Older plugin (before 1.3.0), or a site where you prefer it: pair with the admin
-password and the PIN shown in WP-Admin instead:
+Needs the WPicker plugin 1.3.0 or newer on the site.
 
-  wpicker login https://shop.example --password
-
-Either way a revocable WordPress Application Password is stored in ~/` + config.DirName + `/` + config.SitesFileName + `
+A revocable WordPress Application Password is stored in ~/` + config.DirName + `/` + config.SitesFileName + `
 (readable only by you); your own password is never stored.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		o := loginOpts{Name: loginName, Device: loginDevice, Password: loginPassword, NoBrowser: loginNoBrowser}
+		o := loginOpts{Name: loginName, Device: loginDevice, NoBrowser: loginNoBrowser}
 		if len(args) == 1 {
 			o.Site = args[0]
 			if url, err := config.NormalizeURL(o.Site); err == nil {
 				o.Site = url
-				if store, err := config.LoadStore(); err == nil {
-					if key, _ := config.URLKey(url); store.ByKey(key) != nil {
-						o.Username = store.ByKey(key).Username
-					}
-				}
 			}
 		}
 		return runLogin(cmd, o)
@@ -78,10 +69,8 @@ var deviceWait func(ctx context.Context, d time.Duration) error
 type loginOpts struct {
 	Site      string
 	Fixed     bool   // the site is a listed one being paired again: do not ask for it
-	Username  string // for the password flow
 	Name      string // short name for the site
 	Device    string
-	Password  bool // use the older username + password + PIN flow
 	NoBrowser bool
 }
 
@@ -101,20 +90,14 @@ func runLogin(cmd *cobra.Command, o loginOpts) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	var res *auth.Result
-	var err error
-	if o.Password {
-		res, err = auth.Login(ctx, auth.Prefill{URL: o.Site, Username: o.Username, Fixed: o.Fixed}, Version, os.Stdin, os.Stdout)
-	} else {
-		do := auth.DeviceOptions{Site: o.Site, Fixed: o.Fixed, Device: o.Device, CLIVersion: Version, Wait: deviceWait}
-		// Open the browser only for a person at a terminal: never for a script or an agent.
-		if !o.NoBrowser && isTerminal(os.Stdout) && isTerminal(os.Stdin) {
-			do.OpenBrowser = auth.OpenBrowser
-		}
-		stop := cancelOnInterrupt(ctx)
-		res, err = auth.DeviceLogin(stop.ctx, do, os.Stdin, os.Stdout)
-		stop.done()
+	do := auth.DeviceOptions{Site: o.Site, Fixed: o.Fixed, Device: o.Device, CLIVersion: Version, Wait: deviceWait}
+	// Open the browser only for a person at a terminal: never for a script or an agent.
+	if !o.NoBrowser && isTerminal(os.Stdout) && isTerminal(os.Stdin) {
+		do.OpenBrowser = auth.OpenBrowser
 	}
+	stop := cancelOnInterrupt(ctx)
+	res, err := auth.DeviceLogin(stop.ctx, do, os.Stdin, os.Stdout)
+	stop.done()
 	if err != nil {
 		return err
 	}
@@ -253,10 +236,8 @@ func tilde(p string) string {
 func init() {
 	loginCmd.Flags().StringVar(&loginName, "name", "", "short name for the site (default: made from its address)")
 	loginCmd.Flags().StringVar(&loginDevice, "device", "", "name for this computer (default: its host name)")
-	loginCmd.Flags().BoolVar(&loginPassword, "password", false, "pair with the admin password and a PIN instead of approving in the browser")
 	loginCmd.Flags().BoolVar(&loginNoBrowser, "no-browser", false, "print the link but do not open the browser")
 	sitesLoginCmd.Flags().StringVar(&loginDevice, "device", "", "name for this computer (default: its host name)")
-	sitesLoginCmd.Flags().BoolVar(&loginPassword, "password", false, "pair with the admin password and a PIN instead of approving in the browser")
 	sitesLoginCmd.Flags().BoolVar(&loginNoBrowser, "no-browser", false, "print the link but do not open the browser")
 }
 

@@ -51,7 +51,7 @@ final class TestDeviceRoutes extends TestCase {
 	}
 
 	public function test_every_route_that_returns_a_secret_or_a_status_sends_no_store(): void {
-		foreach ( array( 'start', 'poll', 'register_device', 'challenge' ) as $m ) {
+		foreach ( array( 'start', 'poll' ) as $m ) {
 			$b = $this->body( 'includes/REST/Device.php', $m );
 			$this->assertStringNotContainsString( 'return $this->ok(', $b, "$m() returns without no-store" );
 			$this->assertStringNotContainsString( 'return $this->fail(', $b, "$m() returns an error without no-store" );
@@ -63,14 +63,6 @@ final class TestDeviceRoutes extends TestCase {
 		$b = $this->body( 'includes/REST/Device.php', 'poll' );
 		$this->assertSame( 1, substr_count( $b, "'wpicker_code_invalid'" ) );
 		$this->assertStringContainsString( "'miss'", $b, 'a wrong device_code counts against its source' );
-	}
-
-	public function test_a_paired_device_cannot_pair_more_devices(): void {
-		foreach ( array( 'decide', 'permission_session' ) as $m ) {
-			$b = $this->body( 'includes/REST/Device.php', $m );
-			$this->assertStringContainsString( 'rest_get_authenticated_app_password', $b, "$m() must refuse Application Password callers" );
-			$this->assertStringContainsString( 'wpicker_forbidden_device', $b );
-		}
 	}
 
 	public function test_both_anonymous_routes_are_declared_anonymous_and_nothing_else_is(): void {
@@ -149,5 +141,31 @@ final class TestDeviceRoutes extends TestCase {
 		$view = $this->src( 'admin/views/approve.php' );
 		$this->assertMatchesRegularExpression( "#if \\( \\\$same_network \\) :.{0,300}esc_html\\( \\\\WPicker\\\\Auth\\\\DeviceFlow::format#s", $view, 'the code may only be printed when the network matches' );
 		$this->assertStringContainsString( 'Read it in your terminal', $view );
+	}
+
+	public function test_the_password_and_pin_pairing_is_gone_everywhere(): void {
+		$root = dirname( __DIR__, 2 );
+		$rest = $this->src( 'includes/REST/Device.php' );
+		foreach ( array( '/device/challenge', '/device/register', '/device/pairing' ) as $route ) {
+			$this->assertStringNotContainsString( "'" . $route . "'", $rest, "$route belonged to the password + PIN pairing" );
+		}
+		foreach ( array( 'wp_authenticate', 'register_device', 'pins->', 'via_credentials' ) as $word ) {
+			$this->assertStringNotContainsString( $word, $rest, "$word belonged to the password + PIN pairing" );
+		}
+		// The one place the word legitimately appears is the Application Password that is HANDED OUT.
+		$this->assertDoesNotMatchRegularExpression( "/get_param\\(\\s*'(password|username|pin)'/", $rest, 'no route may read a password, username or PIN from the request' );
+		$this->assertFileDoesNotExist( $root . '/includes/Auth/Pin.php' );
+		$this->assertStringNotContainsString( 'rest_challenge', $this->src( 'includes/Auth/Capability.php' ) );
+		foreach ( array( 'wpicker.php', 'includes/Admin/Dashboard.php', 'admin/views/settings.php', 'admin/views/devices.php', 'admin/js/admin.js' ) as $f ) {
+			$this->assertDoesNotMatchRegularExpression( '/pin_ttl|pin_length|wpicker-pin|initPairing|\/device\/challenge/', $this->src( $f ), "$f still mentions the PIN pairing" );
+		}
+	}
+
+	public function test_pairing_can_only_be_approved_from_a_logged_in_browser_session(): void {
+		// A paired device (Application Password) cannot approve anything: approval is wp-admin
+		// (cookie) only, never a REST route.
+		$rest = $this->src( 'includes/REST/Device.php' );
+		$this->assertStringNotContainsString( 'decide(', $rest, 'no REST route may record an approval' );
+		$this->assertStringContainsString( 'admin_post_', $this->src( 'includes/Admin/Approve.php' ) );
 	}
 }

@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -197,22 +199,22 @@ func TestContract_DecodeEnvelope(t *testing.T) {
 	raw := []byte(`{
 		"ok": true,
 		"data": {
-			"user_id": 1,
-			"pin": "123456",
-			"expires_at_gmt": "date",
-			"ttl": 600,
-			"hint": "message"
+			"device_code": "dc",
+			"user_code": "K7QF-92XM",
+			"verification_url": "https://x.example/wp-admin/admin.php?page=wpicker-approve",
+			"expires_in": 600,
+			"interval": 3
 		}
 	}`)
-	
-	res, status, err := decodeEnvelope[ChallengeResponse](raw, 200)
+
+	res, status, err := decodeEnvelope[DeviceStart](raw, 200)
 	if err != nil {
 		t.Fatalf("decodeEnvelope failed: %v", err)
 	}
 	if status != 200 {
 		t.Errorf("status = %d", status)
 	}
-	if res.PIN != "123456" || res.TTL != 600 {
+	if res.UserCode != "K7QF-92XM" || res.ExpiresIn != 600 || res.Interval != 3 {
 		t.Errorf("parsed response invalid: %+v", res)
 	}
 }
@@ -270,30 +272,46 @@ func TestContract_BinaryRoundTrip(t *testing.T) {
 }
 
 // TestContract_PairingSendsCredentialsInBody verifies login does not rely on
-// Basic auth, which core only accepts for Application Passwords.
-func TestContract_PairingSendsCredentialsInBody(t *testing.T) {
+// TestContract_PairingIsAnonymousAndNeverSendsAPassword checks the two calls the
+// browser-approved pairing makes: they carry the device name and the secret
+// device_code, and no credentials of any kind.
+func TestContract_PairingIsAnonymousAndNeverSendsAPassword(t *testing.T) {
+	var seen []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, _, ok := r.BasicAuth(); ok {
-			t.Errorf("%s must not send Basic auth", r.URL.Path)
-		}
 		var body map[string]string
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		if r.Method != http.MethodPost || body["username"] != "admin" || body["password"] != "s3cret" {
-			t.Errorf("%s %s body = %v", r.Method, r.URL.Path, body)
+		if r.Header.Get("Authorization") != "" {
+			t.Errorf("%s carried credentials", r.URL.Path)
 		}
+		for k := range body {
+			if k == "password" || k == "username" || k == "pin" {
+				t.Errorf("%s sent %q", r.URL.Path, k)
+			}
+		}
+		seen = append(seen, r.Method+" "+r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"ok":true,"data":{"user_id":1,"ttl":120,"device_id":"d","app_password":"ap"}}`))
+		if strings.HasSuffix(r.URL.Path, "/device/start") {
+			w.WriteHeader(201)
+			w.Write([]byte(`{"ok":true,"data":{"device_code":"dc","user_code":"K7QF-92XM","verification_url":"u","expires_in":600,"interval":3}}`))
+			return
+		}
+		w.WriteHeader(400)
+		w.Write([]byte(`{"ok":false,"error":{"code":"authorization_pending","message":"wait"}}`))
 	}))
 	defer srv.Close()
 	c := New(srv.URL, "", "", srv.Client())
 
-	ch, _, err := c.Challenge(context.Background(), "admin", "s3cret")
-	if err != nil || ch.TTL != 120 {
-		t.Fatalf("Challenge: %+v, %v", ch, err)
+	st, _, err := c.DeviceStart(context.Background(), "laptop")
+	if err != nil || st.DeviceCode != "dc" || st.UserCode != "K7QF-92XM" {
+		t.Fatalf("DeviceStart: %+v, %v", st, err)
 	}
-	reg, _, err := c.Register(context.Background(), "admin", "s3cret", RegisterRequest{PIN: "123456"})
-	if err != nil || reg.AppPassword != "ap" {
-		t.Fatalf("Register: %+v, %v", reg, err)
+	_, _, err = c.DevicePoll(context.Background(), "dc")
+	var re *RESTError
+	if !errors.As(err, &re) || re.Details.Code != CodePending {
+		t.Fatalf("a pending poll must surface as a typed error, got %v", err)
+	}
+	if len(seen) != 2 || seen[0] != "POST /wp-json/wpicker/v1/device/start" || seen[1] != "POST /wp-json/wpicker/v1/device/poll" {
+		t.Fatalf("%v", seen)
 	}
 }
 
