@@ -118,6 +118,7 @@ final class Core {
 		if ( is_admin() ) {
 			$this->admin = new \WPicker\Admin\Dashboard( $this->caps );
 			$this->admin->register();
+			( new \WPicker\Admin\Approve() )->register();
 		}
 	}
 

@@ -15,7 +15,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"wpicker/internal/auth"
 	"wpicker/internal/client"
 	"wpicker/internal/config"
 	"wpicker/internal/tui"
@@ -298,13 +297,15 @@ func pickSite(sel string) (config.Site, error) {
 var sitesLoginCmd = &cobra.Command{
 	Use:   "login <id|name>",
 	Short: "Pair a listed site again (login revoked, password changed).",
-	Args:  cobra.ExactArgs(1),
+	Long: `Pairs a site that is already in the list again: it prints a link, you approve the
+request in your browser. The address is known, so nothing is asked for.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := pickSite(args[0])
 		if err != nil {
 			return err
 		}
-		return pairAndSave(cmd, auth.Prefill{URL: s.URL, Username: s.Username, Fixed: true}, s.Name)
+		return runLogin(cmd, loginOpts{Site: s.URL, Fixed: true, Username: s.Username, Name: s.Name, Device: loginDevice, Password: loginPassword, NoBrowser: loginNoBrowser})
 	},
 }
 

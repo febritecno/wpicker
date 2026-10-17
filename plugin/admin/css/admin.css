@@ -1288,6 +1288,98 @@ body.wpicker-modal-open {
 	font-size: 12px;
 }
 
+/* ---- Pairing: the Devices card and the approval screen ------------------ */
+
+.wpicker-admin .wpicker-code-card,
+.wpicker-admin .wpicker-paired-notice,
+.wpicker-admin .wpicker-approve-card {
+	max-width: 720px;
+	margin-bottom: 16px;
+}
+
+.wpicker-admin .wpicker-code-command code {
+	display: inline-block;
+	padding: 10px 14px;
+	background: var(--wpk-canvas);
+	border: 1px dashed #c3c8d0;
+	border-radius: 8px;
+	font-family: var(--wpk-mono);
+	user-select: all;
+}
+
+.wpicker-admin .wpicker-advanced {
+	max-width: 720px;
+	margin: 0 0 16px;
+}
+
+.wpicker-admin .wpicker-advanced > summary {
+	cursor: pointer;
+	color: var(--wpk-ink-soft);
+	margin-bottom: 8px;
+}
+
+.wpicker-admin .wpicker-approve-lead {
+	margin: 0;
+	color: var(--wpk-ink-soft);
+}
+
+.wpicker-admin .wpicker-approve-site {
+	margin: 4px 0 2px;
+	font-size: 2em;
+	line-height: 1.2;
+}
+
+.wpicker-admin .wpicker-approve-url {
+	margin: 0 0 14px;
+}
+
+.wpicker-admin .wpicker-approve-facts {
+	width: 100%;
+	border-collapse: collapse;
+	margin-bottom: 14px;
+}
+
+.wpicker-admin .wpicker-approve-facts th {
+	width: 150px;
+	padding: 6px 12px 6px 0;
+	text-align: left;
+	vertical-align: top;
+	color: var(--wpk-ink-soft);
+	font-weight: 500;
+}
+
+.wpicker-admin .wpicker-approve-facts td {
+	padding: 6px 0;
+}
+
+.wpicker-admin .wpicker-approve-code {
+	font-family: var(--wpk-mono);
+	font-size: 1.5em;
+	letter-spacing: 0.12em;
+}
+
+.wpicker-admin .wpicker-approve-warn,
+.wpicker-admin .wpicker-approve-notice.is-bad {
+	color: #b32d2e;
+}
+
+.wpicker-admin .wpicker-approve-notice.is-ok {
+	color: #1a6b31;
+}
+
+.wpicker-admin .wpicker-approve-alert {
+	margin: 12px 0;
+	padding: 4px 14px;
+	border-left: 4px solid #b32d2e;
+	background: #fcf0f1;
+}
+
+.wpicker-admin .wpicker-approve-rule {
+	padding: 10px 14px;
+	background: #fff8e5;
+	border-left: 4px solid #dba617;
+}
+
 /* ---- Pairing PIN ------------------------------------------------------- */
 
 .wpicker-admin .wpicker-pin-card {

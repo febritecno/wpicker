@@ -99,12 +99,17 @@ Keep the plugin and the CLI on the same version; `wpicker login` warns when they
 ### 3. Connect the CLI to the site
 
 ```bash
-wpicker login
+wpicker login https://your-site.com
 ```
 
-It asks for the site URL, an administrator username and password, and a **6-digit PIN**. The PIN appears in **WP-Admin → WPicker → Devices** the moment you run the command — read it there and type it in.
+It prints a link and opens it in your browser. There you log in to WordPress as you always do (so your password and any two-factor plugin apply), see **which site and which device** are asking, check that the code matches the one in your terminal, and press **Approve**. The terminal then finishes by itself. Nothing is typed into it, and your password never reaches the CLI.
 
-- The password is used once to pair and is never stored. The CLI keeps a separate, revocable credential for this device in `~/.wpicker/sites.json` (readable only by you).
+- Only approve a request you started yourself, a moment ago, on your own computer. Never approve a link somebody sent you. When the request came from a different network than your browser (for example, you ran the command on a server over SSH), WP-Admin makes you type the code from that terminal before it lets you approve.
+- Add `--no-browser` to only print the link. `--password` pairs the old way (admin password and a PIN from WP-Admin), for a plugin older than 1.3.0.
+- **Behind a proxy or CDN** (Cloudflare, a load balancer, some managed hosts): WordPress then sees every visitor as one address, so WPicker cannot tell whether the request came from your network, and always asks you to type the code. `wpicker doctor` says when this applies. If your proxy sets the real address in a header and strips it from outside requests, tell WPicker: `add_filter( 'wpicker_client_ip', fn() => $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] );`
+- Typing the code is a speed bump against someone who sends you a link, not a wall: a determined phisher can simply tell you the code. Do not approve requests you did not start.
+- Approving needs the `edit_themes` capability (on multisite: a super administrator). On a site that sets `DISALLOW_FILE_EDIT`, WordPress removes that capability from everyone, and no pairing method of WPicker works until it is lifted.
+- The CLI keeps a separate, revocable credential for this device in `~/.wpicker/sites.json` (readable only by you); your own password is never stored. WordPress emails you when a device is paired, and WP-Admin → WPicker → Devices shows who just joined, with a *Revoke it* button.
 - You can pair **several sites**; logging in to another one does not touch the first. See them with `wpicker sites`.
 - Check which site a folder uses with `wpicker whoami`, or ask the site to describe itself with `wpicker context`.
 - Remove a site any time with `wpicker sites delete <id>` (it also revokes this computer on the site), or from WP-Admin → WPicker → Devices.

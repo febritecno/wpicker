@@ -95,13 +95,7 @@ func Login(ctx context.Context, defaults Prefill, cliVersion string, in io.Reade
 		return nil, fmt.Errorf("challenge failed (HTTP %d): %w", status, err)
 	}
 
-	if challenge.PluginVersion != "" && challenge.PluginVersion != cliVersion {
-		fmt.Fprintf(out, "\n⚠️  VERSION MISMATCH: CLI is v%s, but Plugin is v%s.\n", cliVersion, challenge.PluginVersion)
-		fmt.Fprintln(out, "   We strongly recommend updating so both are the same version.")
-		fmt.Fprintln(out, "   - To update CLI: run `wpicker update`")
-		fmt.Fprintln(out, "   - To update Plugin: go to WP Admin -> Plugins -> Update WPicker")
-		fmt.Fprintln(out)
-	}
+	warnVersion(out, cliVersion, challenge.PluginVersion)
 
 	fmt.Fprintf(out, "✓ PIN issued. Open WP-Admin → WPicker to read it (valid %d seconds).\n", challenge.TTL)
 
@@ -168,5 +162,5 @@ func defaultDeviceName() string {
 	if err != nil || host == "" {
 		return "WPicker CLI"
 	}
-	return host
+	return strings.TrimSuffix(host, ".local")
 }

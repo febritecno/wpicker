@@ -215,4 +215,16 @@ final class TestDoctor extends TestCase {
 			}
 		}
 	}
+
+	public function test_a_proxied_site_is_told_about_the_real_address_filter(): void {
+		$this->assertArrayNotHasKey( 'proxy', $this->statuses() );
+		foreach ( Doctor::evaluate( $this->facts( array( 'proxied' => true ) ) ) as $c ) {
+			if ( 'proxy' === $c['id'] ) {
+				$this->assertSame( 'warn', $c['status'] );
+				$this->assertStringContainsString( 'wpicker_client_ip', $c['fix'] );
+				return;
+			}
+		}
+		$this->fail( 'no proxy check' );
+	}
 }

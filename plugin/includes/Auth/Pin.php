@@ -40,6 +40,12 @@ final class Pin {
 	public const DEFAULT_LENGTH = 6;
 
 	/**
+	 * Wrong guesses a PIN survives. A password holder could otherwise ask for a
+	 * fresh PIN and keep guessing from many addresses.
+	 */
+	public const MAX_WRONG = 3;
+
+	/**
 	 * Issue a fresh PIN for a user. Replaces any existing PIN for that user.
 	 *
 	 * @param int      $user_id User id.
@@ -62,6 +68,8 @@ final class Pin {
 			'pin'      => $pin,
 			'user_id'  => $user_id,
 			'issued_at_gmt' => time(),
+			'ttl'      => $ttl,
+			'attempts' => 0,
 			'used'     => false,
 		);
 
@@ -90,6 +98,14 @@ final class Pin {
 			return false;
 		}
 		if ( ! hash_equals( (string) $payload['pin'], (string) $pin ) ) {
+			$attempts = (int) ( $payload['attempts'] ?? 0 ) + 1;
+			if ( $attempts >= self::MAX_WRONG ) {
+				delete_transient( self::key( $user_id ) );
+			} else {
+				$left = (int) ( $payload['issued_at_gmt'] ?? time() ) + (int) ( $payload['ttl'] ?? self::DEFAULT_TTL ) - time();
+				$payload['attempts'] = $attempts;
+				set_transient( self::key( $user_id ), $payload, max( 1, $left ) );
+			}
 			return false;
 		}
 		// Consume: mark used and delete.
@@ -110,7 +126,7 @@ final class Pin {
 		}
 		$issued = (int) ( $payload['issued_at_gmt'] ?? time() );
 		$settings = get_option( 'wpicker_settings', array() );
-		$ttl      = (int) ( $settings['pin_ttl'] ?? self::DEFAULT_TTL );
+		$ttl      = (int) ( $payload['ttl'] ?? ( $settings['pin_ttl'] ?? self::DEFAULT_TTL ) ); // the TTL it was issued with
 		return array(
 			'pin'            => (string) $payload['pin'],
 			'expires_at_gmt' => gmdate( 'c', $issued + $ttl ),

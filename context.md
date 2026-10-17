@@ -31,7 +31,7 @@ Versi di kode: **1.0.0** (`plugin/wpicker.php`, `cli/cmd/root.go`). Tag git: `v1
 cli/
   main.go
   cmd/                 perintah cobra: login, context, theme, history, rollback, page, scan, device, init, update
-  internal/auth/       alur login PIN
+  internal/auth/       login: persetujuan di browser (device flow), password+PIN (--password), batas otomatis
   internal/client/     HTTP client + method per endpoint (api.go)
   internal/config/     ~/.wpicker/sites.json (multi-site, flock) + config.json lama (hanya dibaca/diimpor)
   internal/sync/       walk, sha256, diff, tulis atomik, manifest lokal
@@ -65,7 +65,7 @@ Flag global: `--site <url>` (override site), `--json` (output mesin, untuk agent
 
 | Perintah | Fungsi |
 |---|---|
-| `wpicker login` | Pairing via PIN 6 digit → Application Password per perangkat |
+| `wpicker login [alamat]` | Device flow (RFC 8628): CLI minta pairing → cetak tautan + kode → admin login di wp-admin (password + 2FA berlaku), cocokkan kode, **Approve** → CLI polling dan menerima Application Password sekali. `--no-browser`, `--password` (cara lama: password + PIN). |
 | `wpicker sites` (+ `login/stop/start/delete/use/link/unlink`), `whoami` | Daftar site + status + folder; site mana yang dipakai folder ini dan kenapa. `logout` kini alias tersembunyi `sites delete --local-only` |
 | `wpicker context [--save]` | Konteks site. `--save` → `./.wpicker/context.json` |
 | `wpicker connect [agent…]` | Hubungkan agent AI / adapter ke WPicker. **Global adalah bawaan** (semua agent yang terpasang); `--project` untuk satu proyek; agent yang hanya punya aturan per proyek (cursor, copilot, windsurf, cline, roo, zed, kiro) ditulis ke proyek saat disebut namanya. `connect list`, `connect remove <agent>`, `--refresh`. Adapter buatan sendiri: JSON di `~/.wpicker/adapters/` (tidak pernah dibaca dari proyek). Dipanggil otomatis oleh `install.sh`, `login`, `update`. |
@@ -101,7 +101,9 @@ Namespace: `/wp-json/wpicker/v1`. Auth: Basic dengan Application Password (kecua
 | GET | `/context` | `edit_theme_options` |
 | GET | `/device/challenge` | `edit_themes` (sesi WP-Admin) |
 | POST | `/device/challenge` | username + password di body |
-| POST | `/device/register` | username + password di body, + PIN |
+| POST | `/device/start` | **anonim** — buka permintaan pairing; balikan `device_code` (rahasia CLI, hanya HMAC-nya disimpan), `user_code`, `verification_url` |
+| POST | `/device/poll` | **anonim** — `device_code`; `authorization_pending` / `slow_down` / `access_denied` / `expired_token` / sukses (sekali) |
+| POST | `/device/register` | (jalur lama) username + password di body, + PIN |
 | GET | `/device/pairing` | `edit_themes` (sesi) — status pairing + PIN yang sedang aktif |
 | DELETE | `/device/pairing` | `edit_themes` (sesi) — hentikan pairing, PIN dibuang |
 | GET | `/device` | `manage_options` |
@@ -428,3 +430,13 @@ Belum diuji: restore yang gagal di tengah fase `db` atau `files` (jalur kode ada
 3. Merge tiga arah per baris untuk konflik.
 4. Profil multi-site + `wpicker watch`.
 
+
+
+## Pairing lewat browser (device flow)
+
+- `POST /device/start` anonim, dibatasi per-IP (5 start / 15 mnt, maks 3 permintaan tertunda per IP/64, 150 per situs; penuh = **menolak**, bukan membuang yang lama). Hanya HTTPS di luar lingkungan local.
+- Penyimpanan di tabel opsi (`wpicker_dc_*`, autoload off) lewat `INSERT IGNORE` dan `DELETE` yang hasil baris-terdampaknya jadi jawaban: **keputusan pertama menang**, dan **hanya satu `poll` yang menghapus baris permintaan** sehingga hanya satu yang menerima kredensial (tidak bergantung pada object cache).
+- Halaman persetujuan `admin.php?page=wpicker-approve&user_code=…` tersembunyi, wp-admin biasa (login + 2FA berlaku), GET tidak mengubah apa pun; Approve = POST + nonce. Jaringan peminta ≠ jaringan browser → admin harus mengetik kode dari terminal.
+- Kredensial selalu untuk **pengguna yang menyetujui** (dicek ulang kemampuan `edit_themes` saat dilepas), tidak pernah identitas permintaan `poll`. Perangkat yang sudah terpasang tidak bisa memasangkan perangkat lain.
+- Email ke pengguna yang menyetujui; kartu "A device just paired — Revoke it" di Devices.
+- CLI: tautan harus satu host dengan alamat situs; teks dari server dibersihkan dari karakter kontrol sebelum dicetak; browser hanya dibuka untuk run interaktif.

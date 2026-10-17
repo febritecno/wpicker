@@ -17,7 +17,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"wpicker/internal/auth"
 	"wpicker/internal/config"
 )
 
@@ -787,7 +786,7 @@ func TestLoginRefusesANameThatCouldShadowAnId(t *testing.T) {
 	fresh(t)
 	loginName = "2"
 	defer func() { loginName = "" }()
-	if err := pairAndSave(loginCmd, auth.Prefill{}, "2"); err == nil || !strings.Contains(err.Error(), "--name") {
+	if err := runLogin(loginCmd, loginOpts{Name: "2"}); err == nil || !strings.Contains(err.Error(), "--name") {
 		t.Fatalf("%v", err)
 	}
 }
@@ -798,7 +797,7 @@ func TestLoginStopsBeforePairingWhenTheStoreIsBroken(t *testing.T) {
 	os.WriteFile(filepath.Join(d, config.SitesFileName), []byte("{broken"), 0o600)
 	_ = home
 	// If it got as far as the password prompt it would read stdin; the point is that it never does.
-	err := pairAndSave(loginCmd, auth.Prefill{}, "")
+	err := runLogin(loginCmd, loginOpts{})
 	if err == nil || !strings.Contains(err.Error(), "parse") {
 		t.Fatalf("expected the broken store to be reported first: %v", err)
 	}

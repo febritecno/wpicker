@@ -183,8 +183,19 @@ if ( ! function_exists( 'get_transient' ) ) {
 }
 if ( ! function_exists( 'delete_transient' ) ) {
 	function delete_transient( string $transient ): bool {
+		// Like core: false when there was nothing to delete (the basis of single-use codes).
+		$had = isset( $GLOBALS['wp_transients'][ $transient ] );
 		unset( $GLOBALS['wp_transients'][ $transient ] );
-		return true;
+		// A test can make "another request got there first" by naming the key.
+		if ( isset( $GLOBALS['wpicker_delete_fails'] ) && $GLOBALS['wpicker_delete_fails'] === $transient ) {
+			return false;
+		}
+		return $had;
+	}
+}
+if ( ! function_exists( 'wp_salt' ) ) {
+	function wp_salt( string $scheme = 'auth' ): string {
+		return 'test-salt-' . $scheme;
 	}
 }
 if ( ! function_exists( 'wp_mkdir_p' ) ) {

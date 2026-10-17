@@ -82,6 +82,7 @@ final class Doctor {
 			'push_mode'       => (string) ( $settings['push_mode'] ?? 'direct' ),
 			'devices'         => $devices,
 			'probe'           => $probe,
+			'proxied'         => \WPicker\Auth\PairRateLimit::behind_proxy(),
 			'vault_web'       => $web,
 			'file_mods_off'   => defined( 'DISALLOW_FILE_MODS' ) && DISALLOW_FILE_MODS,
 		);
@@ -260,6 +261,10 @@ final class Doctor {
 		}
 		if ( ! empty( $f['debug_log'] ) ) {
 			$add( 'debug_log', 'Access', self::WARN, 'WordPress debug logging is left ON', 'It logs every notice and deprecation, grows a file, and slows the site slightly.', 'Run `wpicker debug off` when you are done.' );
+		}
+
+		if ( ! empty( $f['proxied'] ) ) {
+			$add( 'proxy', 'Access', self::WARN, 'The site is behind a proxy or CDN that WPicker cannot see past', 'Every visitor looks like the same address. Pairing limits then apply to everyone at once, and the check "this request came from another network than your browser" cannot work, so approving a device always asks you to type the code.', 'Tell WPicker the real address: add_filter( \'wpicker_client_ip\', fn() => $_SERVER[\'HTTP_X_FORWARDED_FOR\'] ?? $_SERVER[\'REMOTE_ADDR\'] ); (only if your proxy sets that header and strips it from outside requests).' );
 		}
 
 		$devices = (array) ( $f['devices'] ?? array() );

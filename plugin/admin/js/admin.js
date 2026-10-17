@@ -64,6 +64,10 @@
 		var busy = false;
 
 		function show( pin, expiresIn ) {
+			var details = document.getElementById( 'wpicker-pin-details' );
+			if ( details ) {
+				details.open = true; // a PIN the CLI asked for must be visible
+			}
 			code.textContent = pin;
 			expiresAt = Date.now() + expiresIn * 1000;
 			countdown.textContent = Math.max( 0, Math.round( expiresIn ) );
@@ -163,6 +167,23 @@
 		poll();
 		setInterval( poll, POLL_MS );
 	}
+
+	// --- "A device just paired — not you? Revoke it" -------------------------
+	document.querySelectorAll( '.wpicker-notice-revoke' ).forEach( function ( btn ) {
+		btn.addEventListener( 'click', async function () {
+			var box = btn.closest( '[data-device-id]' );
+			var id = box && box.getAttribute( 'data-device-id' );
+			if ( ! id || ! window.confirm( 'Revoke this device? It will immediately lose access.' ) ) {
+				return;
+			}
+			var r = await api( 'DELETE', '/device/' + encodeURIComponent( id ) );
+			if ( r.body && r.body.ok ) {
+				window.location.reload();
+			} else {
+				toast( errorMessage( r, 'Revoke failed.' ), true );
+			}
+		} );
+	} );
 
 	// --- Backups -----------------------------------------------------------
 	var backupTable = document.getElementById( 'wpicker-backup-table' );
