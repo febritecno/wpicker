@@ -22,9 +22,9 @@ It has two halves:
 
 ## Preview
 
-| Pair a device by approving it in the browser | Every push is a snapshot you can inspect, revert or restore |
-|:---:|:---:|
-| [![Devices: how to pair, and registered devices](screenshots/devices.png)](screenshots/devices.png) | [![Snapshots: search, filters, status and per-push actions](screenshots/snapshots.png)](screenshots/snapshots.png) |
+| Every push is a snapshot you can inspect, revert or restore |
+|:---:|
+| [![Snapshots: search, filters, status and per-push actions](screenshots/snapshots.png)](screenshots/snapshots.png) |
 | **Full-site backup and restore, or restore from a file** | **Direct or review-first pushes, safety checks, limits** |
 | [![Backup & Restore: create, upload, restore, download](screenshots/backup-restore.png)](screenshots/backup-restore.png) | [![Settings: push mode, safety checks, backups, limits](screenshots/settings.png)](screenshots/settings.png) |
 | **Scan installed plugins for known vulnerabilities** | |
