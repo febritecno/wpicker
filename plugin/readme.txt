@@ -4,7 +4,7 @@ Tags: ai, cli, deployment, child-theme, rollback, developer-tools
 Requires at least: 6.2
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.2.0
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -53,6 +53,15 @@ In `wp-content/uploads/wpicker-vault/<manifest-id>/`, protected from web access 
 
 == Changelog ==
 
+= 1.3.0 =
+Update the plugin and the CLI together. Pairing changed and the old way is gone: a CLI older than 1.3.0 can no longer pair with this plugin, and this CLI needs plugin 1.3.0. Devices that are already paired keep working.
+
+* New: pair a device by approving it in your browser. `wpicker login <site>` prints a link; you log in to WordPress as usual (so your password and any two-factor plugin apply), see which site and which device are asking, and press Approve. No password, PIN or code is typed into the terminal, and the CLI never sees your password.
+* Safer: the credentials go only to the program that started the request (it holds a secret that never appears on screen or in the link), once, for the user who approved. When the request came from a different network than your browser, you must type the code shown in the terminal, and the page does not show it. The approving user is emailed, and Devices shows who just paired with a Revoke button.
+* Safer: pairing requests are limited per address (and per IPv6 /48); a site behind a proxy or CDN is detected, and `wpicker doctor` explains the `wpicker_client_ip` filter that fixes it.
+* Removed: pairing with an administrator password and a PIN, the PIN card and the "PIN lifetime" setting. That path sent the password to the site from a program, skipped two-factor plugins, and let a paired device create more devices, so revoking a stolen token did not end access.
+* Fixed: on multisite a super administrator can approve a device although not a member of the sub-site.
+
 = 1.2.0 =
 Update the plugin and the CLI together. The CLI's `--site`, `logout` and `init` behave differently; see the release notes.
 
@@ -78,6 +87,9 @@ Update the plugin and the CLI together: pairing and file transfer changed, and a
 * Initial public version.
 
 == Upgrade Notice ==
+
+= 1.3.0 =
+Pairing is now approved in your browser and the password + PIN way is removed. Update the wpicker CLI to 1.3.0 at the same time, or it cannot pair with this version.
 
 = 1.2.0 =
 Adds a self-check (`wpicker doctor`), WooCommerce and payment log reading, and stronger masking of secrets in diagnostics. Update the wpicker CLI to 1.2.0 at the same time.

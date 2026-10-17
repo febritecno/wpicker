@@ -1,6 +1,6 @@
 {
   "name": "wpicker",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "description": "WPicker — a bridge (Go CLI + WordPress plugin) to make WordPress AI-native. The Eyes (plugin) + The Hands (CLI).",
   "scripts": {

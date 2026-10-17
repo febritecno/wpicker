@@ -46,7 +46,8 @@ The site needs:
 
 - PHP 7.4 or newer, with the `php` command available to the web server (used to syntax-check pushed files).
 - An **active child theme**, if you want to sync theme files. WPicker only ever writes inside the child theme — never the parent theme, core, or `wp-config.php`.
-- HTTPS (or `WP_ENVIRONMENT_TYPE` set to `local`) for pairing with a password.
+- HTTPS (or `WP_ENVIRONMENT_TYPE` set to `local`): WordPress only hands out Application Passwords on secure sites, and WPicker pairs through one.
+- The `edit_themes` capability for whoever approves a device (on multisite: a super administrator). A site that sets `DISALLOW_FILE_EDIT` removes it from everybody.
 
 ### 2. Install the CLI on your computer
 
@@ -277,6 +278,10 @@ wpicker debug on                        # record every warning, notice and depre
 wpicker logs --since 5m --trace         # …reproduce the problem, then read them
 wpicker debug off
 
+wpicker map                             # what is installed: plugins, themes, WooCommerce gateways, email plugins
+wpicker find woocommerce_thankyou --kind hook   # where a function, class, hook or REST route is defined
+wpicker logs --source wc:stripe         # WooCommerce and payment-gateway logs (new level: error)
+
 wpicker files ls plugins/my-plugin      # any code under wp-content
 wpicker files cat plugins/my-plugin/main.php --lines 80-120
 wpicker files grep "add_action( 'init'" plugins
@@ -286,6 +291,8 @@ wpicker db query "SELECT ID, post_title, post_status FROM wp_posts ORDER BY ID D
 ```
 
 - **Logs** come from PHP's error log, `wp-content/debug.log`, and WPicker's own log. `wpicker debug on` does what `WP_DEBUG` + `WP_DEBUG_LOG` do — everything is logged, nothing is shown to visitors — without editing `wp-config.php`.
+- **Secrets are masked by their shape**, not only by the name next to them: payment keys, bearer tokens, JWTs, card numbers (checked with the Luhn test, so order numbers stay readable) and CVCs, including inside `print_r` dumps and in lines cut by the length limit. The names of log files are never sent.
+- **Map and find** read an index of the site's PHP (functions, classes, methods, hooks, shortcodes, REST routes, post types, options), kept per file so a second search takes milliseconds. `wpicker map` marks plugins that are the site's own, and a plugin that is a symbolic link out of `wp-content` (it cannot be read there, and says so).
 - **Files** are read-only and limited to `wp-content`. `wp-config.php`, backups, key files and database dumps are not available.
 - **Database** queries are read-only: `SELECT`, `SHOW`, `DESCRIBE`, `EXPLAIN`, one statement, run in a read-only transaction. Credentials are out of reach — the password columns do not exist for these queries, rows holding keys, tokens, salts or sessions are left out, and tables that are credential stores by name are refused.
 
@@ -295,7 +302,7 @@ Everything else in the database **can** be read, including customer and personal
 
 ## Using it with an AI agent
 
-There is nothing to set up per project. The installer teaches Claude Code, Codex and Gemini CLI about WPicker, and `wpicker login` sets up whichever agents it finds in the folder you log in from (Cursor, Copilot, Windsurf, Cline too). In Claude Code, ask about your site or type `/wpicker`. `wpicker update` refreshes the instruction files WPicker wrote, so they never go stale; `wpicker guide` prints the full instructions an agent follows.
+There is nothing to set up per project for the agents that have a global setting. The installer (or `wpicker connect`) teaches Claude Code, OpenCode, Codex, Gemini CLI and Goose about WPicker, so `/wpicker` works in Claude Code right away. For a tool that only has per-project rules (Cursor, Copilot, Windsurf, Cline, Roo, Zed, Kiro), run `wpicker connect <name>` in the project; `wpicker login` offers to do it when it finds one there. `wpicker update` refreshes the instruction files WPicker wrote, so they never go stale, and `wpicker guide` prints the full instructions an agent follows.
 
 - Every command takes `--json` for machine-readable output.
 - `wpicker context` gives the agent the facts it would otherwise guess: WordPress and PHP versions, active theme, plugins, theme settings.
@@ -312,7 +319,7 @@ Global flags: `--json`, `--site <id|name|address>`, `-v`.
 
 | Command | Purpose |
 |---|---|
-| `wpicker login [address]` | Pair this computer with a site (add it, or pair it again) |
+| `wpicker login [address]` | Pair this computer with a site: open the link it prints and approve it in your browser (`--no-browser`, `--device`, `--name`) |
 | `wpicker sites` | List your sites with live status and linked folders |
 | `wpicker sites login\|stop\|start\|delete\|use <id>` | Re-pair, switch off/on, forget (revokes this computer), make default |
 | `wpicker sites link [id]` / `unlink` | Use a site in this folder from now on / stop |
@@ -336,7 +343,9 @@ Global flags: `--json`, `--site <id|name|address>`, `-v`.
 | `wpicker clone --path <dir>` | Back up the site and restore it locally |
 | `wpicker page create --title … --builder divi\|elementor\|gutenberg --file …` | Create a page from a builder payload |
 | `wpicker page update <post-id> --builder … --file …` | Update one |
-| `wpicker logs` (`--since`, `--level`, `--grep`, `--trace`) | The site's errors, grouped |
+| `wpicker map` | What is installed: plugins, themes, WooCommerce gateways, email plugins |
+| `wpicker find <name> [--kind …] [--in …]` | Where a function, class, hook, shortcode, REST route, post type or option is defined |
+| `wpicker logs` (`--since`, `--level`, `--grep`, `--trace`, `--source wc[:name]`) | The site's errors, grouped (including WooCommerce and payment gateways) |
 | `wpicker debug on` / `off` / `status` | WordPress debug logging |
 | `wpicker files ls` / `cat` / `grep` | Read code under wp-content |
 | `wpicker db tables` / `db query "<sql>"` | Read-only database access, without credentials |
@@ -351,6 +360,7 @@ Global flags: `--json`, `--site <id|name|address>`, `-v`.
 
 - **Theme sync is the child theme only.** Plugins, uploads and the database travel through backups, as a whole — not file by file or page by page.
 - **Restoring a backup from the CLI targets your computer.** Restoring onto a site is done in its WP-Admin.
+- **Pairing needs a browser** that can open the site's WP-Admin. It can be on another computer than the one running the command (type the code it shows); a machine with no browser at all cannot pair.
 - **Multisite networks** are not supported for backups.
 - **Email addresses** at the old domain are left as they are when a site is moved.
 - Sites of many gigabytes have not been tested.
