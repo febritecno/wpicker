@@ -299,8 +299,7 @@ func agentChecks(dir, home string) []check {
 	var out []check
 	seen := map[string]bool{}
 	found := 0
-	for i := range agentTargets {
-		t := &agentTargets[i]
+	for _, t := range allTargets() {
 		for _, global := range []bool{false, true} {
 			path, root, ok := t.pathFor(dir, home, global)
 			if !ok || seen[path] {
@@ -340,7 +339,12 @@ func agentChecks(dir, home string) []check {
 	}
 	if found == 0 {
 		out = append(out, check{ID: "agents", Group: "AI agents", Status: stInfo, Title: "No AI agent has WPicker instructions yet",
-			Detail: "Agents will not know how to use `wpicker` on their own.", Fix: "Run `wpicker connect` (in a project) or `wpicker connect --global`."})
+			Detail: "Agents will not know how to use `wpicker` on their own.", Fix: "Run `wpicker connect` (every agent found on this computer), or `wpicker connect <agent>`."})
+	}
+	_, problems := loadAdapters()
+	for _, p := range problems {
+		out = append(out, check{ID: "adapter", Group: "AI agents", Status: stWarn, Title: "An adapter file in ~/.wpicker/adapters was ignored",
+			Detail: p, Fix: "Fix or delete that file; see `wpicker connect --help` for the format."})
 	}
 	return out
 }

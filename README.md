@@ -57,15 +57,31 @@ curl -sL https://raw.githubusercontent.com/febritecno/wpicker/main/install.sh | 
 wpicker --help
 ```
 
-The installer also teaches the AI agents it finds in your home directory (Claude Code, Codex, Gemini CLI) how to use WPicker, so `/wpicker` works in Claude Code right away. Skip that with `bash -s -- install --no-agents`.
+The installer also connects the AI agents it finds on your computer (Claude Code, OpenCode, Codex, Gemini CLI, Goose), so `/wpicker` works in Claude Code right away. Skip that with `bash -s -- install --no-agents`.
 
-Other agents are set up per project, from the project folder:
+`wpicker connect` does the same at any time. **Global is the default**, and you can pick which agents:
 
 ```bash
-wpicker connect                    # the agents it finds in this project (else AGENTS.md)
-wpicker connect --agent all        # Claude Code, Cursor, Codex, Gemini, Copilot, Windsurf, Cline
-wpicker connect --agent claude --global
+wpicker connect                      # every agent found on this computer, for all your projects
+wpicker connect claude opencode      # just those (same as --agent claude,opencode)
+wpicker connect --agent all          # every adapter
+wpicker connect cursor               # a tool with only per-project rules: written into this project
+wpicker connect claude --project     # this project only
+wpicker connect list                 # what is connected, current or stale
+wpicker connect remove claude        # take WPicker out again
 ```
+
+Built in: `claude`, `opencode`, `codex` (AGENTS.md), `gemini`, `goose`, `cursor`, `copilot`, `windsurf`, `cline`, `roo`, `zed`, `kiro`. The locations and formats of these tools' rule files are from memory of their conventions, not checked against each tool's current documentation; if one stops working, tell us (each is one line in `cli/cmd/connect.go`).
+
+**Your own adapters.** Anything else that reads an instruction file can be connected without changing WPicker: drop a JSON file in `~/.wpicker/adapters/` (never read from a project, so a cloned repository cannot add one):
+
+```json
+{"key": "mytool", "name": "My Tool",
+ "global": ".mytool/instructions.md", "project": "MYTOOL.md",
+ "mode": "block", "content": "stub", "detect": ["~/.mytool"]}
+```
+
+`mode` is `block` (a marked section in a file you also write in) or `file` (a file of WPicker's own, with optional `frontmatter`: `skill`, `cursor` or `windsurf`); `content` is `stub` (a short pointer) or `guide` (the full guide). Paths must be relative and stay inside their folder; a bad file is ignored with a reason in `wpicker connect list` and `wpicker doctor`.
 
 Safety: the instruction files are only written inside the project (never through a symbolic link that leads out of it), a file you wrote is never replaced without `--force`, and `login` asks before touching a project. Run `connect` as yourself, not with `sudo`. Your pairing is per user, not per project, so when you open a repository you do not trust, do not let your agent run `wpicker` freely there: allow only the read-only commands (`map`, `logs`, `find`, `files`, `db`, `guide`) and keep `theme push` and `rollback` on ask.
 
@@ -299,7 +315,7 @@ Global flags: `--json`, `--site <id|name|address>`, `-v`.
 | `wpicker doctor` | Checklist: is WPicker itself set up and working |
 | `wpicker device list` / `revoke <id>` | Advanced: every computer paired with the site |
 | `wpicker context [--save]` | Site facts for you or your agent |
-| `wpicker connect [--agent …]` | Write the instructions AI agents follow (Claude Code skill `/wpicker`, `AGENTS.md`, Cursor, Gemini, Copilot, Windsurf, Cline); `--refresh` updates the ones already written |
+| `wpicker connect [agent…]` | Connect AI agents and other adapters (global by default; `--project`, `--agent all`, `--refresh`); `connect list` / `connect remove <agent>` |
 | `wpicker guide` | Print the full agent instructions |
 | `wpicker theme status` | To push, to pull, conflicts — and who pushed |
 | `wpicker theme diff [path…]` | Line diff, local vs. site |

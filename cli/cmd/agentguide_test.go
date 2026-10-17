@@ -157,7 +157,7 @@ func TestUpsertBlockRefusesABrokenBlock(t *testing.T) {
 }
 
 func TestAgentRegistry(t *testing.T) {
-	keys, paths := map[string]bool{}, map[string]bool{}
+	keys, owned, shared, globals := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, a := range agentTargets {
 		if keys[a.key] {
 			t.Errorf("duplicate agent key %q", a.key)
@@ -169,10 +169,22 @@ func TestAgentRegistry(t *testing.T) {
 		if a.global != "" && (filepath.IsAbs(a.global) || strings.Contains(a.global, "..")) {
 			t.Errorf("%s: bad global path %q", a.key, a.global)
 		}
-		if paths[a.project] {
-			t.Errorf("two agents write %s", a.project)
+		// A file of our own belongs to exactly one adapter. A shared file (AGENTS.md is
+		// read by several tools) may be used by several, because each only adds the same marked block.
+		if a.shared {
+			shared[a.project] = true
+		} else {
+			if owned[a.project] {
+				t.Errorf("two adapters write the file %s", a.project)
+			}
+			owned[a.project] = true
 		}
-		paths[a.project] = true
+		if a.global != "" { // relative to the home directory, a different namespace from project paths
+			if globals[a.global] {
+				t.Errorf("two adapters write ~/%s", a.global)
+			}
+			globals[a.global] = true
+		}
 		out := a.render("", false)
 		if a.shared {
 			if strings.Contains(out, markerPrefix) {
@@ -180,6 +192,16 @@ func TestAgentRegistry(t *testing.T) {
 			}
 		} else if !strings.Contains(out, markerPrefix) {
 			t.Errorf("%s: an owned file must carry the marker, or it can never be refreshed", a.key)
+		}
+	}
+	for p := range shared {
+		if owned[p] {
+			t.Errorf("%s is both a shared file and an adapter's own file", p)
+		}
+	}
+	for _, want := range []string{"claude", "opencode", "codex", "gemini", "cursor", "copilot", "windsurf", "cline", "goose", "roo", "zed", "kiro"} {
+		if findTarget(want) == nil {
+			t.Errorf("built-in adapter %q is missing", want)
 		}
 	}
 	if findTarget("agents") == nil || findTarget("AGENTS.md") == nil || findTarget("nope") != nil {

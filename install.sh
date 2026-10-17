@@ -57,20 +57,20 @@ if [ "$ACTION" = "install" ]; then
     echo "=> wpicker is now available globally. To verify, run: wpicker --help"
 
     if [ "$SETUP_AGENTS" = true ]; then
-        echo "=> Setting up your AI agents (Claude Code, Codex, Gemini CLI where installed)..."
+        echo "=> Connecting the AI agents found on this computer (Claude Code, OpenCode, Codex, Gemini CLI, Goose)..."
         # Never fail the install over this: the binary is already in place.
         # Files must belong to the person, never to root: under sudo, act as them.
         if [ "$(id -u)" = "0" ]; then
             if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
-                sudo -u "$SUDO_USER" -H "$INSTALL_DIR/wpicker" connect --global || echo "   (skipped: run 'wpicker connect --global' later)"
+                sudo -u "$SUDO_USER" -H "$INSTALL_DIR/wpicker" connect || echo "   (skipped: run 'wpicker connect' later)"
             else
-                echo "   (skipped: running as root; run 'wpicker connect --global' as your own user)"
+                echo "   (skipped: running as root; run 'wpicker connect' as your own user)"
             fi
         else
-            "$INSTALL_DIR/wpicker" connect --global || echo "   (skipped: run 'wpicker connect --global' later)"
+            "$INSTALL_DIR/wpicker" connect || echo "   (skipped: run 'wpicker connect' later)"
         fi
     fi
-    echo "=> Next: wpicker login   then   wpicker connect   inside a project (Cursor, Copilot, Windsurf, Cline)"
+    echo "=> Next: wpicker login   then, inside a project, wpicker connect cursor   (or copilot, windsurf, cline, …) for tools that only have per-project rules"
 
 elif [ "$ACTION" = "uninstall" ] || [ "$ACTION" = "remove" ]; then
     echo "=> Removing wpicker from $INSTALL_DIR..."

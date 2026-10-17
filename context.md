@@ -68,7 +68,7 @@ Flag global: `--site <url>` (override site), `--json` (output mesin, untuk agent
 | `wpicker login` | Pairing via PIN 6 digit → Application Password per perangkat |
 | `wpicker sites` (+ `login/stop/start/delete/use/link/unlink`), `whoami` | Daftar site + status + folder; site mana yang dipakai folder ini dan kenapa. `logout` kini alias tersembunyi `sites delete --local-only` |
 | `wpicker context [--save]` | Konteks site. `--save` → `./.wpicker/context.json` |
-| `wpicker connect [--agent …]` | Tulis instruksi untuk agent AI (skill `/wpicker` Claude Code, `AGENTS.md`, Cursor, Gemini, Copilot, Windsurf, Cline); `--refresh` menyegarkan yang sudah ada. Dipanggil otomatis oleh `install.sh`, `login`, dan `update`. `init` sudah dihapus. |
+| `wpicker connect [agent…]` | Hubungkan agent AI / adapter ke WPicker. **Global adalah bawaan** (semua agent yang terpasang); `--project` untuk satu proyek; agent yang hanya punya aturan per proyek (cursor, copilot, windsurf, cline, roo, zed, kiro) ditulis ke proyek saat disebut namanya. `connect list`, `connect remove <agent>`, `--refresh`. Adapter buatan sendiri: JSON di `~/.wpicker/adapters/` (tidak pernah dibaca dari proyek). Dipanggil otomatis oleh `install.sh`, `login`, `update`. |
 | `wpicker guide` | Cetak panduan lengkap untuk agent |
 | `wpicker theme files` | Daftar file child theme di server |
 | `wpicker theme status` | Seperti `git status`: yang perlu di-push, yang bisa di-pull, konflik |

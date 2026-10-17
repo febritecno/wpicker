@@ -20,7 +20,8 @@ import (
 
 var (
 	connectAgents  []string
-	connectGlobal  bool
+	connectProject bool
+	connectGlobal  bool // accepted for old scripts; global is the default now
 	connectForce   bool
 	connectDir     string
 	connectRefresh bool
@@ -161,6 +162,7 @@ type agentTarget struct {
 	shared  bool   // a file the user may also write in: insert a marked block instead of owning it
 	render  func(site string, global bool) string
 	detect  []string // paths (under the project, or "~/"-prefixed) whose presence means the agent is in use
+	custom  bool     // defined by the user in ~/.wpicker/adapters, not built in
 }
 
 func full(f func(string) string) func(string, bool) string {
@@ -190,6 +192,16 @@ var agentTargets = []agentTarget{
 		render: full(windsurfRule), detect: []string{".windsurf", ".windsurfrules"}},
 	{key: "cline", name: "Cline", project: ".clinerules/wpicker.md",
 		render: plain, detect: []string{".clinerules"}},
+	{key: "opencode", name: "OpenCode", project: "AGENTS.md", global: ".config/opencode/AGENTS.md", shared: true,
+		render: block, detect: []string{".opencode", "opencode.json", "~/.config/opencode"}},
+	{key: "goose", name: "Goose", project: ".goosehints", global: ".config/goose/.goosehints", shared: true,
+		render: block, detect: []string{".goosehints", "~/.config/goose"}},
+	{key: "roo", name: "Roo Code", project: ".roo/rules/wpicker.md",
+		render: plain, detect: []string{".roo", ".roorules"}},
+	{key: "zed", name: "Zed", project: ".rules", shared: true,
+		render: block, detect: []string{".rules", ".zed"}},
+	{key: "kiro", name: "Kiro", project: ".kiro/steering/wpicker.md",
+		render: plain, detect: []string{".kiro"}},
 }
 
 func findTarget(key string) *agentTarget {
@@ -197,17 +209,17 @@ func findTarget(key string) *agentTarget {
 	if key == "agents" || key == "agents.md" {
 		key = "codex"
 	}
-	for i := range agentTargets {
-		if agentTargets[i].key == key {
-			return &agentTargets[i]
+	for _, t := range allTargets() {
+		if t.key == key {
+			return t
 		}
 	}
 	return nil
 }
 
 func agentKeys() string {
-	keys := make([]string, 0, len(agentTargets))
-	for _, t := range agentTargets {
+	var keys []string
+	for _, t := range allTargets() {
 		keys = append(keys, t.key)
 	}
 	return strings.Join(keys, ", ")
@@ -227,8 +239,8 @@ func (t *agentTarget) pathFor(dir, home string, global bool) (path, root string,
 // detectAgents returns the agents that already have a footprint in the project or home directory.
 func detectAgents(dir, home string) []*agentTarget {
 	var out []*agentTarget
-	for i := range agentTargets {
-		for _, d := range agentTargets[i].detect {
+	for _, t := range allTargets() {
+		for _, d := range t.detect {
 			p := filepath.Join(dir, d)
 			if strings.HasPrefix(d, "~/") {
 				if home == "" {
@@ -237,7 +249,7 @@ func detectAgents(dir, home string) []*agentTarget {
 				p = filepath.Join(home, strings.TrimPrefix(d, "~/"))
 			}
 			if _, err := os.Lstat(p); err == nil {
-				out = append(out, &agentTargets[i])
+				out = append(out, t)
 				break
 			}
 		}
@@ -462,8 +474,7 @@ func applyTargets(targets []*agentTarget, dir, home string, global, force bool) 
 func refreshManaged(dir, home string) int {
 	n := 0
 	seen := map[string]bool{}
-	for i := range agentTargets {
-		t := &agentTargets[i]
+	for _, t := range allTargets() {
 		for _, global := range []bool{false, true} {
 			path, root, ok := t.pathFor(dir, home, global)
 			if !ok || seen[path] || !ownedByWPicker(path, t.shared) {
@@ -541,42 +552,63 @@ func connectAfterLogin(dir, home string) {
 }
 
 var connectCmd = &cobra.Command{
-	Use:   "connect",
-	Short: "Teach AI agents (Claude Code, Cursor, Codex, Gemini, Copilot, …) to use WPicker.",
-	Long: `Writes the instructions an AI agent needs to explore and fix this WordPress site
-with WPicker: which commands to run, in what order, and what is off limits.
+	Use:   "connect [agent...]",
+	Short: "Connect AI agents (Claude Code, OpenCode, Codex, Cursor, …) and other adapters to WPicker.",
+	Long: `Teaches AI agents how to use WPicker: which commands to run, in what order, and
+what is off limits. Each agent (or tool) is an ADAPTER; the built-in ones are below,
+and you can add your own (see "Your own adapters").
 
-  wpicker connect                         the agents it finds in this project (else AGENTS.md)
-  wpicker connect --agent claude          Claude Code skill, so /wpicker works
-  wpicker connect --agent claude,cursor   several
-  wpicker connect --agent all             every supported agent
-  wpicker connect --agent claude --global for every project, not just this one
-  wpicker connect --refresh               only update the files WPicker wrote earlier
+  wpicker connect                       every agent found on this computer, for all your projects
+  wpicker connect claude opencode       just those (same as --agent claude,opencode)
+  wpicker connect --agent all           every adapter
+  wpicker connect cursor                an agent that has no global setting: written into this project
+  wpicker connect claude --project      this project only, instead of every project
+  wpicker connect list                  what is connected, what is stale
+  wpicker connect remove claude         take WPicker out again
+  wpicker connect --refresh             only update what WPicker wrote earlier
 
-Supported: ` + "`" + `claude, cursor, codex (AGENTS.md), gemini, copilot, windsurf, cline` + "`" + `.
+Global is the default. An agent that only has per-project rules (Cursor, Copilot,
+Windsurf, Cline, Roo, Zed, Kiro) is written into the current project when you name it.
 
-Agents that load rules on demand (Claude Code, Cursor, Windsurf) get the full
-guide. Agents that read a file in every conversation get a short pointer instead,
-and fetch the full guide with ` + "`wpicker guide`" + ` only when the task is about the site.
+Agents that load rules on demand (Claude Code skill, Cursor, Windsurf) get the full
+guide. Agents that read a file in every conversation get a short pointer, and fetch the
+full guide with ` + "`wpicker guide`" + ` only when the task is about the site.
 
-Files shared with you (AGENTS.md, GEMINI.md, Copilot instructions) only get a
-marked block; the rest of the file is never touched. A dedicated file you wrote
-yourself is not replaced without --force. Nothing is written through a symbolic
-link that leads outside the project.
+Files shared with you (AGENTS.md, GEMINI.md, .rules, …) only get a marked block; the
+rest is never touched. A dedicated file you wrote yourself is not replaced without
+--force. Nothing is written through a symbolic link that leads outside its folder.
 
-Run it as yourself, not with sudo: files written as root would be stuck in your
-home directory. Rule file formats change between agent releases: if one stops
+Your own adapters: put a JSON file in ~/.wpicker/adapters/ (never read from a project,
+so a cloned repository cannot add one). Example, ~/.wpicker/adapters/mytool.json:
+
+  {"key": "mytool", "name": "My Tool",
+   "global": ".mytool/instructions.md", "project": "MYTOOL.md",
+   "mode": "block", "content": "stub", "detect": ["~/.mytool"]}
+
+  mode         "block" = a marked section in a file you may also write in (default for stub),
+               "file"  = a file of WPicker's own
+  content      "stub" = short pointer to ` + "`wpicker guide`" + `, "guide" = the full guide
+  frontmatter  for mode "file": none | skill | cursor | windsurf
+  global       path under your home directory (leave out if the tool has no global setting)
+  project      path under a project folder
+  detect       paths whose presence means the tool is in use ("~/" = under your home)
+
+Paths must be relative and stay inside their folder.
+
+Run it as yourself, not with sudo: files written as root would be stuck in your home
+directory. Rule file formats change between releases of these tools: if one stops
 working, tell us.`,
-	Args: cobra.NoArgs,
+	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dir := connectDir
 		if dir == "" {
 			dir, _ = os.Getwd()
 		}
 		home, _ := os.UserHomeDir()
+		names := append(append([]string{}, connectAgents...), args...)
 
 		if connectRefresh {
-			if len(connectAgents) > 0 || connectGlobal || connectForce {
+			if len(names) > 0 || connectProject || connectForce {
 				return errors.New("--refresh works on its own: it updates the files WPicker already wrote")
 			}
 			if runningAsRoot() {
@@ -590,45 +622,54 @@ working, tell us.`,
 			return errors.New("run this as your own user, not root or sudo: the files would end up owned by root in your home directory")
 		}
 
-		global := connectGlobal || sameDir(dir, home)
 		var targets []*agentTarget
-		if len(connectAgents) == 0 {
+		if len(names) == 0 {
 			targets = detectAgents(dir, home)
-			if global {
-				targets = filterGlobal(targets)
+			if !connectProject {
+				// Everything reachable globally that is installed here; per-project tools wait to be named.
+				var perProject []string
+				var global []*agentTarget
+				for _, t := range targets {
+					if t.global != "" {
+						global = append(global, t)
+					} else {
+						perProject = append(perProject, t.key)
+					}
+				}
+				targets = global
+				if len(perProject) > 0 {
+					fmt.Printf("Also found in this folder, set up per project: %s. Connect them with `wpicker connect %s`.\n",
+						strings.Join(perProject, ", "), strings.Join(perProject, " "))
+				}
 			}
 			switch {
-			case len(targets) == 0 && global:
-				// Nothing installed that reads a global file: do not create ~/.codex or ~/.gemini for it.
-				fmt.Println("No Claude Code, Codex or Gemini CLI found in your home directory, so nothing was installed globally.")
-				fmt.Println("Per project instead: `wpicker connect` (or `wpicker connect --agent all`) in the project folder.")
+			case len(targets) == 0 && !connectProject:
+				fmt.Println("No agent with a global setting found on this computer (Claude Code, OpenCode, Codex, Gemini CLI, Goose).")
+				fmt.Println("Name the ones you use: `wpicker connect claude`, or `wpicker connect --agent all`.")
 				return nil
 			case len(targets) == 0:
 				targets = []*agentTarget{findTarget("codex")}
 				fmt.Println("No agent found in this project; writing AGENTS.md, which many agents read.")
 			default:
-				names := make([]string, len(targets))
-				for i, t := range targets {
-					names[i] = t.name
-				}
-				fmt.Printf("Found: %s\n", strings.Join(names, ", "))
+				fmt.Printf("Found: %s\n", strings.Join(targetNames(targets), ", "))
 			}
 		} else {
 			seen := map[string]bool{}
-			for _, raw := range connectAgents {
+			for _, raw := range names {
 				for _, k := range strings.Split(raw, ",") {
-					if strings.TrimSpace(k) == "" {
+					k = strings.TrimSpace(k)
+					if k == "" {
 						continue
 					}
-					if strings.EqualFold(strings.TrimSpace(k), "all") {
-						for i := range agentTargets {
-							addTarget(&targets, seen, &agentTargets[i])
+					if strings.EqualFold(k, "all") {
+						for _, t := range allTargets() {
+							addTarget(&targets, seen, t)
 						}
 						continue
 					}
 					t := findTarget(k)
 					if t == nil {
-						return fmt.Errorf("unknown agent %q; choose from: %s, all", k, agentKeys())
+						return fmt.Errorf("unknown agent %q; choose from: %s, all (or `wpicker connect list`)", k, agentKeys())
 					}
 					addTarget(&targets, seen, t)
 				}
@@ -639,9 +680,9 @@ working, tell us.`,
 		}
 		sort.SliceStable(targets, func(i, j int) bool { return targets[i].key < targets[j].key })
 
-		done, failed := applyTargets(targets, dir, home, connectGlobal, connectForce)
+		done, failed := applyDefault(targets, dir, home, connectProject, connectForce)
 		if done == 0 && failed == 0 {
-			return errors.New("none of those agents has a global location; run it without --global inside a project")
+			return errors.New("nothing was written")
 		}
 
 		connectCheck(cmd)
@@ -654,10 +695,35 @@ working, tell us.`,
 			}
 		}
 		if failed > 0 {
-			return fmt.Errorf("%d agent(s) could not be connected", failed)
+			return fmt.Errorf("%d adapter(s) could not be connected", failed)
 		}
 		return nil
 	},
+}
+
+func targetNames(ts []*agentTarget) []string {
+	out := make([]string, len(ts))
+	for i, t := range ts {
+		out[i] = t.name
+	}
+	return out
+}
+
+// applyDefault writes each adapter where it belongs: its global file when it has
+// one (the default), otherwise the current project. forceProject writes the
+// project file instead, for adapters that have both. It prints which it did.
+func applyDefault(targets []*agentTarget, dir, home string, forceProject, force bool) (done, failed int) {
+	var global, project []*agentTarget
+	for _, t := range targets {
+		if t.global != "" && !forceProject && !sameDir(dir, home) {
+			global = append(global, t)
+		} else {
+			project = append(project, t)
+		}
+	}
+	d1, f1 := applyTargets(global, dir, home, true, force)
+	d2, f2 := applyTargets(project, dir, home, false, force)
+	return d1 + d2, f1 + f2
 }
 
 func addTarget(list *[]*agentTarget, seen map[string]bool, t *agentTarget) {
@@ -700,12 +766,12 @@ func connectCheck(cmd *cobra.Command) {
 }
 
 func init() {
-	connectCmd.Flags().StringSliceVar(&connectAgents, "agent", nil, "agents to connect: "+agentKeysStatic()+", or all (default: the ones found in this project)")
-	connectCmd.Flags().BoolVar(&connectGlobal, "global", false, "install in your home directory so every project has it (claude, codex, gemini)")
+	connectCmd.Flags().StringSliceVar(&connectAgents, "agent", nil, "adapters to connect (comma-separated, or \"all\"); same as naming them after `connect`")
+	connectCmd.Flags().BoolVar(&connectProject, "project", false, "write into this project instead of the global setting")
+	connectCmd.Flags().BoolVar(&connectGlobal, "global", false, "global is the default; kept so older scripts keep working")
+	_ = connectCmd.Flags().MarkHidden("global")
 	connectCmd.Flags().BoolVar(&connectForce, "force", false, "replace a dedicated file that WPicker did not write")
 	connectCmd.Flags().BoolVar(&connectRefresh, "refresh", false, "only refresh the files WPicker wrote earlier (project and home); create nothing")
 	connectCmd.Flags().StringVar(&connectDir, "dir", "", "project directory (default: the current one)")
 	rootCmd.AddCommand(connectCmd)
 }
-
-func agentKeysStatic() string { return "claude, cursor, codex, gemini, copilot, windsurf, cline" }
