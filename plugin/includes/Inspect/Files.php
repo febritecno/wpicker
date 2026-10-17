@@ -68,6 +68,41 @@ final class Files {
 	}
 
 	/**
+	 * Why resolve() said no, in words an agent can act on. It never says where
+	 * a link points: only that it leaves wp-content.
+	 *
+	 * @param string $relative Path relative to wp-content.
+	 * @return string
+	 */
+	public static function why_unavailable( string $relative ): string {
+		$relative = trim( str_replace( '\\', '/', $relative ), '/' );
+		$root     = realpath( WP_CONTENT_DIR );
+		if ( false === $root || false !== strpos( $relative, "\0" ) ) {
+			return 'not available for reading';
+		}
+		$walk = '';
+		foreach ( explode( '/', $relative ) as $part ) {
+			if ( '' === $part ) {
+				continue;
+			}
+			$walk .= '/' . $part;
+			if ( is_link( $root . $walk ) ) {
+				$real = realpath( $root . $walk );
+				if ( false === $real || ( $real !== $root && 0 !== strpos( $real, $root . DIRECTORY_SEPARATOR ) ) ) {
+					return ltrim( $walk, '/' ) . ' is a symbolic link that points outside wp-content; WPicker does not follow those; read the code from where it really lives';
+				}
+			}
+		}
+		// Only say "withheld" for something that really is inside wp-content:
+		// a path that climbs out of it must look exactly like a missing one.
+		$real = realpath( $root . '/' . $relative );
+		if ( false !== $real && ( $real === $root || 0 === strpos( $real, $root . DIRECTORY_SEPARATOR ) ) ) {
+			return 'withheld: credentials, backups, logs and WPicker\'s own storage are not readable';
+		}
+		return 'no such path under wp-content';
+	}
+
+	/**
 	 * Is this path (relative to wp-content) one we do not hand out?
 	 *
 	 * @param string $relative Path below wp-content.
@@ -154,7 +189,7 @@ final class Files {
 	public static function read( string $relative, int $from = 1, int $to = 0 ): array {
 		$path = self::resolve( $relative );
 		if ( null === $path || ! is_file( $path ) ) {
-			return array( 'error' => 'File not found, or not available for reading.' );
+			return array( 'error' => 'Cannot read this file: ' . ( null === $path ? self::why_unavailable( $relative ) : 'it is not a regular file' ) . '.' );
 		}
 		$size = (int) filesize( $path );
 		$base = array(
@@ -204,7 +239,7 @@ final class Files {
 	public static function grep( string $pattern, string $relative, array $options ): array {
 		$base = self::resolve( $relative );
 		if ( null === $base ) {
-			return array( 'error' => 'Path not found, or not available for reading.' );
+			return array( 'error' => 'Cannot read this path: ' . self::why_unavailable( $relative ) . '.' );
 		}
 		if ( '' === $pattern ) {
 			return array( 'error' => 'Nothing to search for.' );

@@ -40,7 +40,15 @@ final class Logs {
 	/**
 	 * Severity order, most severe first.
 	 */
-	private const LEVELS = array( 'fatal', 'warning', 'notice', 'deprecated', 'info' );
+	private const LEVELS = array( 'fatal', 'error', 'warning', 'notice', 'deprecated', 'info' );
+
+	/**
+	 * Most bytes of log text read in one request, newest files first, and the
+	 * most WooCommerce log files looked at.
+	 */
+	private const BYTE_BUDGET = 8388608;
+	private const WC_MAX_FILES = 40;
+	private const MAX_LINE     = 500;
 
 	/**
 	 * Where PHP was logging before debug_boot() redirected it. Older errors
@@ -206,7 +214,82 @@ final class Logs {
 		$add( 'diag', self::private_log() );
 		$add( 'wp', untrailingslashit( WP_CONTENT_DIR ) . '/debug.log' );
 		$add( 'php', '' !== self::$server_log ? self::$server_log : (string) ini_get( 'error_log' ) );
+		foreach ( self::wc_files() as $name => $path ) {
+			$found[ $name ] = $path;
+		}
 		return $found;
+	}
+
+	/**
+	 * WooCommerce file logs (payment gateways write here), as `wc:<handle>`
+	 * => path, newest first. The names are built here from the directory
+	 * listing and are the only way a path is ever reached: a requested source
+	 * is looked up in this map, never turned into a path.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function wc_files(): array {
+		$dir = defined( 'WC_LOG_DIR' ) ? (string) WC_LOG_DIR : trailingslashit( (string) ( wp_upload_dir( null, false )['basedir'] ?? '' ) ) . 'wc-logs/';
+		$dir = rtrim( $dir, '/\\' );
+		$real_dir = '' !== $dir ? realpath( $dir ) : false;
+		if ( false === $real_dir || ! is_dir( $real_dir ) ) {
+			return array();
+		}
+		$files = array();
+		foreach ( (array) glob( $real_dir . '/*.log' ) as $path ) {
+			if ( is_link( $path ) || ! is_file( $path ) || ! is_readable( $path ) ) {
+				continue;
+			}
+			$real = realpath( $path );
+			if ( false === $real || 0 !== strpos( $real, $real_dir . DIRECTORY_SEPARATOR ) ) {
+				continue;
+			}
+			$files[ $real ] = (int) filemtime( $real );
+		}
+		arsort( $files );
+		$found = array();
+		foreach ( array_slice( array_keys( $files ), 0, self::WC_MAX_FILES ) as $path ) {
+			$handle = self::wc_handle( basename( $path ) );
+			$name   = 'wc:' . $handle;
+			// Several dated files can share a handle: keep the newest as `wc:<handle>`.
+			if ( isset( $found[ $name ] ) ) {
+				$name .= '#' . substr( md5( $path ), 0, 6 );
+			}
+			$found[ $name ] = $path;
+		}
+		return $found;
+	}
+
+	/**
+	 * `stripe-2026-01-02-3f9a…c1.log` => `stripe`.
+	 *
+	 * @param string $file File name.
+	 * @return string
+	 */
+	public static function wc_handle( string $file ): string {
+		$name = (string) preg_replace( '/\.log$/', '', $file );
+		$name = (string) preg_replace( '/-[0-9a-f]{32}$/', '', $name );
+		$name = (string) preg_replace( '/-\d{4}-\d{2}-\d{2}$/', '', $name );
+		$name = strtolower( (string) preg_replace( '/[^A-Za-z0-9_-]+/', '-', $name ) );
+		return '' === $name ? 'log' : substr( $name, 0, 64 );
+	}
+
+	/**
+	 * Does a requested source name select this one? `wc` selects every
+	 * WooCommerce log, `wc:stripe` one handle.
+	 *
+	 * @param string $want Requested.
+	 * @param string $name Source name.
+	 * @return bool
+	 */
+	private static function source_matches( string $want, string $name ): bool {
+		if ( 'all' === $want || $want === $name ) {
+			return true;
+		}
+		if ( 'wc' === $want ) {
+			return 0 === strpos( $name, 'wc:' );
+		}
+		return 0 === strpos( $name, $want . '#' );
 	}
 
 	/**
@@ -228,22 +311,30 @@ final class Logs {
 
 		$groups  = array();
 		$sources = array();
+		$budget  = self::BYTE_BUDGET;
 		foreach ( self::sources() as $name => $path ) {
-			if ( 'all' !== $source && $source !== $name ) {
+			if ( ! self::source_matches( $source, $name ) ) {
 				continue;
 			}
+			// Name and size only: a log's real file name can be the one thing
+			// keeping it private on a server that ignores .htaccess.
 			$sources[ $name ] = array(
-				'file'  => self::short_path( $path ),
 				'bytes' => (int) filesize( $path ),
 			);
-			foreach ( self::entries( $path ) as $entry ) {
+			if ( $budget <= 0 || ( $after > 0 && (int) filemtime( $path ) < $after ) ) {
+				$sources[ $name ]['skipped'] = true;
+				continue;
+			}
+			$budget -= min( self::TAIL_BYTES, (int) filesize( $path ) );
+			$parsed  = 0 === strpos( $name, 'wc:' ) ? self::wc_entries( $path, self::wc_handle( basename( $path ) ) ) : self::entries( $path );
+			foreach ( $parsed as $entry ) {
 				if ( $entry['time'] < $after || array_search( $entry['level'], self::LEVELS, true ) > $worst ) {
 					continue;
 				}
 				if ( '' !== $grep && false === stripos( $entry['message'] . ' ' . $entry['file'], $grep ) ) {
 					continue;
 				}
-				$key = $entry['level'] . '|' . $entry['message'] . '|' . $entry['file'] . '|' . $entry['line'];
+				$key = $entry['level'] . '|' . self::group_key( $entry['message'] ) . '|' . $entry['file'] . '|' . $entry['line'] . '|' . $name;
 				if ( ! isset( $groups[ $key ] ) ) {
 					$groups[ $key ] = array(
 						'level'   => $entry['level'],
@@ -323,6 +414,107 @@ final class Logs {
 			$entries[] = $current;
 		}
 		return $entries;
+	}
+
+	/**
+	 * Collapse the parts of a message that vary per occurrence (order ids,
+	 * amounts, request ids, hashes) so one problem is one group.
+	 *
+	 * @param string $message Message.
+	 * @return string
+	 */
+	public static function group_key( string $message ): string {
+		$key = (string) preg_replace( '/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i', '#', $message );
+		// Prefixed ids such as req_1a2b…, ch_3Abc… (hex or base62), and bare hashes.
+		$key = (string) preg_replace( '/\b([A-Za-z]{2,10}_)[A-Za-z0-9]{12,}/', '$1#', $key );
+		$key = (string) preg_replace( '/(?<![0-9a-f])[0-9a-f]{16,}(?![0-9a-f])/i', '#', $key );
+		$key = (string) preg_replace( '/\d+/', '#', $key );
+		return $key;
+	}
+
+	/**
+	 * Read the end of one WooCommerce log file.
+	 *
+	 * @param string $path   File.
+	 * @param string $handle Log handle (file name without date and hash).
+	 * @return array<int,array<string,mixed>>
+	 */
+	private static function wc_entries( string $path, string $handle ): array {
+		$size = (int) filesize( $path );
+		$text = (string) file_get_contents( $path, false, null, max( 0, $size - self::TAIL_BYTES ) );
+		if ( $size > self::TAIL_BYTES ) {
+			$text = (string) substr( $text, (int) strpos( $text, "\n" ) + 1 );
+		}
+		return self::parse_wc( $text, $handle );
+	}
+
+	/**
+	 * Parse WooCommerce log text: `2026-01-01T10:00:00+00:00 LEVEL message`,
+	 * where any line that does not start with a timestamp continues the entry
+	 * before it (context, stack trace). Pure: takes text, not a path.
+	 *
+	 * Gateways log every declined card as ERROR, so these are the `error`
+	 * level — not `fatal`, which stays for crashes. The one exception is
+	 * WooCommerce's own `fatal-errors` log.
+	 *
+	 * @param string $text   Log text.
+	 * @param string $handle Log handle.
+	 * @return array<int,array<string,mixed>>
+	 */
+	public static function parse_wc( string $text, string $handle = '' ): array {
+		$map     = array(
+			'EMERGENCY' => 'error',
+			'ALERT'     => 'error',
+			'CRITICAL'  => 'error',
+			'ERROR'     => 'error',
+			'WARNING'   => 'warning',
+			'NOTICE'    => 'notice',
+			'INFO'      => 'info',
+			'DEBUG'     => 'info',
+		);
+		$entries = array();
+		$current = null;
+		foreach ( preg_split( '/\R/', $text ) as $line ) {
+			if ( 1 === preg_match( '/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:?\d{2}|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)\s+([A-Za-z]+)\s?(.*)$/', $line, $m )
+				&& false !== ( $time = strtotime( $m[1] ) ) && isset( $map[ strtoupper( $m[2] ) ] ) ) {
+				if ( null !== $current ) {
+					$entries[] = $current;
+				}
+				$level = $map[ strtoupper( $m[2] ) ];
+				if ( 'fatal-errors' === $handle && 'error' === $level ) {
+					$level = 'fatal';
+				}
+				$current = array(
+					'time'    => $time,
+					'level'   => $level,
+					'message' => self::cut( self::clean( $m[3] ) ),
+					'file'    => '',
+					'line'    => 0,
+					'trace'   => array(),
+				);
+			} elseif ( null !== $current && '' !== trim( $line ) && count( $current['trace'] ) < 12 ) {
+				$current['trace'][] = self::cut( self::clean( trim( $line ) ) );
+			}
+		}
+		if ( null !== $current ) {
+			$entries[] = $current;
+		}
+		return $entries;
+	}
+
+	/**
+	 * Cut an over-long line. Always applied AFTER clean(): cutting first can
+	 * remove the closing quote a redaction rule needs, and leak the secret.
+	 *
+	 * @param string $line Line.
+	 * @return string
+	 */
+	private static function cut( string $line ): string {
+		if ( strlen( $line ) <= self::MAX_LINE ) {
+			return $line;
+		}
+		$head = function_exists( 'mb_strcut' ) ? mb_strcut( $line, 0, self::MAX_LINE, 'UTF-8' ) : substr( $line, 0, self::MAX_LINE );
+		return $head . '…';
 	}
 
 	/**

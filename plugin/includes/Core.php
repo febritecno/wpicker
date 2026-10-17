@@ -17,6 +17,7 @@ use WPicker\REST\Backup;
 use WPicker\REST\Base;
 use WPicker\REST\Context;
 use WPicker\REST\Device;
+use WPicker\REST\Doctor;
 use WPicker\REST\Inspect;
 use WPicker\REST\Page;
 use WPicker\REST\Theme;
@@ -145,6 +146,7 @@ final class Core {
 			new Vuln(),
 			new Backup(),
 			new Inspect(),
+			new Doctor(),
 			new Page(),
 		);
 

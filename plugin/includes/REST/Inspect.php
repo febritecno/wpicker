@@ -6,6 +6,8 @@
  *   GET  /inspect/status       what is switched on, which logs exist
  *   POST /inspect/debug        { enabled } turn WordPress debug logging on / off
  *   GET  /inspect/logs         parsed, grouped PHP + WordPress log entries
+ *   GET  /inspect/map          what is installed: plugins, themes, drop-ins, integrations
+ *   GET  /inspect/symbols      where functions, classes, hooks, routes… are defined
  *   GET  /inspect/files        list a directory under wp-content
  *   GET  /inspect/file         read a text file under wp-content
  *   GET  /inspect/grep         search text files under wp-content
@@ -28,6 +30,8 @@ use WPicker\Inspect\Audit;
 use WPicker\Inspect\Database;
 use WPicker\Inspect\Files;
 use WPicker\Inspect\Logs;
+use WPicker\Inspect\Map;
+use WPicker\Inspect\Symbols;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -68,10 +72,23 @@ final class Inspect extends Base {
 				'logs',
 				array(
 					'since'  => $int( 0 ),
-					'level'  => array( 'type' => 'string', 'default' => 'info', 'enum' => array( 'fatal', 'warning', 'notice', 'deprecated', 'info' ) ),
+					'level'  => array( 'type' => 'string', 'default' => 'info', 'enum' => array( 'fatal', 'error', 'warning', 'notice', 'deprecated', 'info' ) ),
 					'grep'   => $string,
-					'source' => array( 'type' => 'string', 'default' => 'all', 'enum' => array( 'all', 'php', 'wp', 'diag' ) ),
+					'source' => array( 'type' => 'string', 'default' => 'all', 'pattern' => '^(all|php|wp|diag|wc(:[a-z0-9_-]{1,64}(#[0-9a-f]{6})?)?)$' ),
 					'limit'  => $int( 50 ),
+				)
+			),
+			$route( '/inspect/map', 'GET', 'map' ),
+			$route(
+				'/inspect/symbols',
+				'GET',
+				'symbols',
+				array(
+					'q'      => array( 'type' => 'string', 'default' => '', 'maxLength' => 120 ),
+					'kind'   => array( 'type' => 'string', 'default' => '', 'pattern' => '^[a-z_,]{0,120}$' ),
+					'in'     => array( 'type' => 'string', 'default' => 'custom', 'pattern' => '^[A-Za-z0-9_.:-]{1,80}$' ),
+					'limit'  => $int( 50 ),
+					'vendor' => $bool,
 				)
 			),
 			$route( '/inspect/files', 'GET', 'files', array( 'path' => $string, 'depth' => $int( 1 ) ) ),
@@ -167,8 +184,36 @@ final class Inspect extends Base {
 			'source' => $request->get_param( 'source' ),
 			'limit'  => $request->get_param( 'limit' ),
 		);
-		Audit::record( 'logs', 'level=' . $args['level'] . ' since=' . $args['since'] . ( '' !== $args['grep'] ? ' grep=' . $args['grep'] : '' ) );
+		Audit::record( 'logs', 'source=' . $args['source'] . ' level=' . $args['level'] . ' since=' . $args['since'] . ( '' !== $args['grep'] ? ' grep=' . $args['grep'] : '' ) );
 		return $this->ok( Logs::read( $args ) );
+	}
+
+	/**
+	 * GET /inspect/map.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function map(): WP_REST_Response {
+		Audit::record( 'map' );
+		return $this->ok( Map::site() );
+	}
+
+	/**
+	 * GET /inspect/symbols.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response
+	 */
+	public function symbols( WP_REST_Request $request ): WP_REST_Response {
+		$args = array(
+			'q'      => $request->get_param( 'q' ),
+			'kind'   => $request->get_param( 'kind' ),
+			'in'     => $request->get_param( 'in' ),
+			'limit'  => $request->get_param( 'limit' ),
+			'vendor' => (bool) $request->get_param( 'vendor' ),
+		);
+		Audit::record( 'symbols', 'q=' . $args['q'] . ' kind=' . $args['kind'] . ' in=' . $args['in'] );
+		return $this->ok( Symbols::search( $args ) );
 	}
 
 	/**
@@ -181,7 +226,7 @@ final class Inspect extends Base {
 		$path    = (string) $request->get_param( 'path' );
 		$listing = Files::listing( $path, (int) $request->get_param( 'depth' ) );
 		if ( null === $listing ) {
-			return $this->fail( 'wpicker_path_unavailable', 'Not a directory under wp-content, or not available for reading.', 404, array( 'file' => $path ) );
+			return $this->fail( 'wpicker_path_unavailable', 'Not a directory under wp-content, or not readable: ' . Files::why_unavailable( $path ) . '.', 404, array( 'file' => $path ) );
 		}
 		Audit::record( 'files.list', $path );
 		return $this->ok( $listing );
