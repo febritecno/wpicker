@@ -92,10 +92,16 @@ git tag $VERSION || echo "Tag already exists, proceeding..."
 git push origin $VERSION || echo "Pushing tag failed, perhaps it already exists remotely."
 
 echo "   Uploading assets to GitHub Release..."
-# --verify-tag refuses to create the release unless the tag already exists on GitHub: a release
-# bound to a placeholder ("untagged-...") tag makes `wpicker update` and the WordPress updater
-# compare against a version that is not one.
-gh release create "$VERSION" dist/* --title "WPicker $VERSION" --notes "Release $VERSION" --draft --verify-tag
+# A release bound to a placeholder ("untagged-...") tag makes `wpicker update` and the WordPress
+# updater compare against a version that is not one. So refuse to continue unless the tag really
+# exists on GitHub. (This is checked by hand rather than with `gh release create --verify-tag`,
+# which older versions of gh do not have.)
+git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null 2>&1 || {
+    echo "Error: tag $VERSION is not on GitHub; refusing to create a release without it."
+    exit 1
+}
+
+gh release create "$VERSION" dist/* --title "WPicker $VERSION" --notes "Release $VERSION" --draft
 
 echo ""
 echo "========================================"
